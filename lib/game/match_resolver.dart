@@ -20,9 +20,27 @@ class MatchResolver {
   /// Atraso entre um bloco e o seguinte, para o grupo sair em cascata.
   static const double popStagger = 0.05;
 
+  /// Verdadeiro enquanto existe bloco piscando ou estourando.
+  bool get isResolving => _resolving;
+
+  bool _resolving = false;
+
   void update(double dt) {
     _advance(dt);
     _detect();
+    _resolving = _anyResolving();
+  }
+
+  bool _anyResolving() {
+    for (var index = 0; index < grid.rowCount - 1; index++) {
+      for (var col = 0; col < grid.columns; col++) {
+        final block = grid.atIndex(index, col);
+        if (block != null && !block.isIdle) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   void _advance(double dt) {

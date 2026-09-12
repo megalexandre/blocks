@@ -1,15 +1,20 @@
 import 'dart:ui';
 
-enum BlockColor {
-  red(Color(0xFFEF4D5E)),
-  blue(Color(0xFF3F8EFC)),
-  green(Color(0xFF3ECF8E)),
-  yellow(Color(0xFFF5C542)),
-  purple(Color(0xFFB26BF7));
+import '../ui/glyph.dart';
 
-  const BlockColor(this.color);
+enum BlockColor {
+  red(Color(0xFFEF4D5E), Glyph.heart),
+  blue(Color(0xFF3F8EFC), Glyph.circle),
+  green(Color(0xFF3ECF8E), Glyph.triangle),
+  yellow(Color(0xFFF5C542), Glyph.star),
+  purple(Color(0xFFB26BF7), Glyph.diamond);
+
+  const BlockColor(this.color, this.glyph);
 
   final Color color;
+
+  /// A forma estampada no bloco, para ele não depender só da cor.
+  final Glyph glyph;
 }
 
 enum BlockState {

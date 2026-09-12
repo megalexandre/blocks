@@ -67,6 +67,19 @@ class BlockGrid {
     _fillRow(rowCount - 1);
   }
 
+  /// Existe bloco no ar, ainda caindo. A última linha é o piso, então ela não
+  /// conta.
+  bool get hasFallingBlocks {
+    for (var index = 0; index < rowCount - 1; index++) {
+      for (var col = 0; col < columns; col++) {
+        if (_rows[index][col] != null && _rows[index + 1][col] == null) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /// Desce em uma linha todo bloco que não tem apoio. A última linha é o piso.
   /// Bloco piscando ou estourando não cai.
   void applyGravityStep() {

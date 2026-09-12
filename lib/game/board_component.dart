@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flame/components.dart' hide Block;
 import 'package:flame/events.dart';
 
+import '../ui/glyph.dart';
 import '../ui/palette.dart';
 import 'block.dart';
 import 'block_grid.dart';
@@ -46,8 +47,17 @@ class BoardComponent extends PositionComponent with DragCallbacks {
   double _cellSize = 24;
   double _fallTimer = 0;
 
+  /// Quanto o símbolo é puxado na direção do fundo do tabuleiro. Ele nasce da
+  /// própria cor do bloco, então escurece junto com ela — e quando o bloco
+  /// pisca no branco o símbolo vira o negativo de si mesmo, sem sumir.
+  static const double glyphShade = 0.52;
+
+  /// Lado do símbolo, em fração do lado do bloco.
+  static const double glyphSize = 0.5;
+
   final _panelPaint = Paint()..color = Palette.playfield;
   final _blockPaint = Paint();
+  final _glyphPaint = Paint()..isAntiAlias = true;
   final _dangerPaint = Paint()
     ..color = Palette.dangerLine
     ..strokeWidth = 2
@@ -86,6 +96,8 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     }
 
     matchResolver.update(dt);
+    stackRaiser.frozen = matchResolver.isResolving || grid.hasFallingBlocks;
+
     swapController.update(dt);
   }
 
@@ -165,6 +177,7 @@ class BoardComponent extends PositionComponent with DragCallbacks {
           final look = _lookOf(block);
           _drawBlock(
             canvas,
+            block.color.glyph,
             look.color,
             col * _cellSize,
             _topOf(index),
@@ -199,6 +212,7 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     if (displaced != null) {
       _drawBlock(
         canvas,
+        displaced.color.glyph,
         // Recuo contido de propósito: encolhendo e desbotando muito, o bloco
         // do fundo desaparece atrás do da frente e o cruzamento vira buraco.
         Color.lerp(displaced.color.color, Palette.playfield, 0.18 * depth)!,
@@ -212,6 +226,7 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     if (grabbed != null) {
       _drawBlock(
         canvas,
+        grabbed.color.glyph,
         grabbed.color.color,
         _orbit(animation.displacedCol, animation.grabbedCol, sweep),
         top,
@@ -252,6 +267,7 @@ class BoardComponent extends PositionComponent with DragCallbacks {
   /// bloco encolhendo.
   void _drawBlock(
     Canvas canvas,
+    Glyph glyph,
     Color color,
     double left,
     double top, {
@@ -271,6 +287,18 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, Radius.circular(_cellSize * 0.18)),
       _blockPaint,
+    );
+
+    _glyphPaint.color = Color.lerp(color, Palette.playfield, glyphShade)!;
+    canvas.drawPath(
+      glyph.pathIn(
+        Rect.fromCenter(
+          center: rect.center,
+          width: side * glyphSize,
+          height: side * glyphSize,
+        ),
+      ),
+      _glyphPaint,
     );
   }
 

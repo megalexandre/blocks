@@ -6,6 +6,12 @@ class StackRaiser {
 
   bool boosting = false;
 
-  double get rowsPerSecond =>
-      boosting ? boostRowsPerSecond : baseRowsPerSecond;
+  /// A pilha para de subir enquanto há combinação resolvendo ou bloco caindo.
+  /// É o que dá ao jogador a folga para emendar o chain — e o raise manual
+  /// também não fura essa pausa.
+  bool frozen = false;
+
+  double get rowsPerSecond => frozen
+      ? 0
+      : (boosting ? boostRowsPerSecond : baseRowsPerSecond);
 }
