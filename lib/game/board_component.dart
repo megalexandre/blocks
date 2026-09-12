@@ -6,9 +6,12 @@ import 'package:flame/events.dart';
 
 import '../ui/palette.dart';
 import 'block.dart';
+import 'block_grid.dart';
 import 'stack_raiser.dart';
 import 'swap_controller.dart';
 
+/// O tabuleiro na tela: tempo, geometria, toque e pintura. O estado dos blocos
+/// é do [BlockGrid]; as regras de troca são do [SwapController].
 class BoardComponent extends PositionComponent with DragCallbacks {
   BoardComponent({required this.stackRaiser});
 
@@ -26,13 +29,11 @@ class BoardComponent extends PositionComponent with DragCallbacks {
   static const double fallStepSeconds = 0.035;
 
   final StackRaiser stackRaiser;
-  final _random = math.Random();
 
-  /// Linhas do topo (0) para baixo. A última é a que está entrando por baixo,
-  /// ainda fora da área visível.
-  final List<List<BlockColor?>> _rows = [];
+  /// A linha extra é a que está entrando por baixo, fora da área visível.
+  final grid = BlockGrid(columns: columns, rowCount: visibleRows + 1);
 
-  late final swap = SwapController(rows: _rows, columns: columns);
+  late final swapController = SwapController(grid: grid);
 
   double _riseOffset = 0;
   double _cellSize = 24;
@@ -48,11 +49,6 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     ..color = Palette.cursor
     ..style = PaintingStyle.stroke
     ..strokeWidth = 3;
-
-  @override
-  Future<void> onLoad() async {
-    _fillInitialStack();
-  }
 
   @override
   void onGameResize(Vector2 size) {
@@ -73,16 +69,16 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     _riseOffset += stackRaiser.rowsPerSecond * dt;
     while (_riseOffset >= 1) {
       _riseOffset -= 1;
-      _rows.removeAt(0);
-      _rows.add(_randomRow());
-      swap.onRowConsumed();
+      grid.shiftUp();
     }
 
     _fallTimer += dt;
     while (_fallTimer >= fallStepSeconds) {
       _fallTimer -= fallStepSeconds;
-      _applyGravityStep();
+      grid.applyGravityStep();
     }
+
+    swapController.update(dt);
   }
 
   @override
@@ -90,49 +86,40 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     super.onDragStart(event);
     final cell = _cellAt(event.canvasPosition);
     if (cell != null) {
-      swap.beginDrag(cell.col, cell.row);
+      swapController.beginDrag(cell.col, cell.rowId);
     }
   }
 
   @override
   void onDragUpdate(DragUpdateEvent event) {
     // localPosition vira NaN quando o dedo sai do componente; canvas sempre vale.
-    swap.dragTo(_columnAt(event.canvasEndPosition.x));
+    swapController.dragTo(_columnAt(event.canvasEndPosition.x));
   }
 
   @override
   void onDragEnd(DragEndEvent event) {
     super.onDragEnd(event);
-    swap.endDrag();
+    swapController.endDrag();
   }
 
-  /// Desce em uma linha todo bloco que não tem apoio. A última linha é o piso.
-  void _applyGravityStep() {
-    for (var row = _rows.length - 2; row >= 0; row--) {
-      for (var col = 0; col < columns; col++) {
-        if (_rows[row][col] != null && _rows[row + 1][col] == null) {
-          _rows[row + 1][col] = _rows[row][col];
-          _rows[row][col] = null;
-        }
-      }
-    }
-  }
-
-  ({int col, int row})? _cellAt(Vector2 canvasPoint) {
+  ({int col, int rowId})? _cellAt(Vector2 canvasPoint) {
     final localX = canvasPoint.x - position.x;
     final localY = canvasPoint.y - position.y;
     if (localX < 0 || localY < 0 || localX >= size.x || localY >= size.y) {
       return null;
     }
-    final row = (localY / _cellSize + _riseOffset).floor().clamp(
+    final index = (localY / _cellSize + _riseOffset).floor().clamp(
       0,
-      _rows.length - 1,
+      grid.rowCount - 1,
     );
-    return (col: _columnAt(canvasPoint.x), row: row);
+    return (col: _columnAt(canvasPoint.x), rowId: grid.rowIdAt(index));
   }
 
   int _columnAt(double canvasX) =>
       ((canvasX - position.x) / _cellSize).floor().clamp(0, columns - 1);
+
+  /// Topo da linha que está no índice visual [index].
+  double _topOf(int index) => (index - _riseOffset) * _cellSize;
 
   @override
   void render(Canvas canvas) {
@@ -145,19 +132,117 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     canvas.save();
     canvas.clipRRect(panel);
     _renderBlocks(canvas);
+    _renderSwapAnimation(canvas);
     _renderCursor(canvas);
     canvas.restore();
 
     _renderDangerLine(canvas);
   }
 
+  void _renderBlocks(Canvas canvas) {
+    final animation = swapController.animation;
+    final animatedIndex = animation != null && grid.hasRow(animation.rowId)
+        ? grid.indexOf(animation.rowId)
+        : null;
+
+    for (var index = 0; index < grid.rowCount; index++) {
+      for (var col = 0; col < columns; col++) {
+        // Os dois blocos da troca são desenhados depois, por cima de tudo.
+        if (index == animatedIndex &&
+            (col == animation!.grabbedCol || col == animation.displacedCol)) {
+          continue;
+        }
+        final block = grid.atIndex(index, col);
+        if (block != null) {
+          _drawBlock(canvas, block, col * _cellSize, _topOf(index));
+        }
+      }
+    }
+  }
+
+  /// Os dois blocos giram em torno do ponto entre eles, como uma porta
+  /// giratória: o escolhido vem pela frente, e cresce porque está mais perto;
+  /// o empurrado vai pelo fundo, encolhendo e desbotando. Eles se cruzam
+  /// trocando de lado.
+  ///
+  /// No cruzamento os dois ficam no centro do vão e as bordas aparecem por um
+  /// instante. Isso é geométrico: quem troca de lado tem que se cruzar. O que
+  /// disfarça é o bloco da frente estar aumentado, cobrindo mais.
+  void _renderSwapAnimation(Canvas canvas) {
+    final animation = swapController.animation;
+    if (animation == null || !grid.hasRow(animation.rowId)) {
+      return;
+    }
+    final top = _topOf(grid.indexOf(animation.rowId));
+
+    // Órbita: o x é a projeção do giro e o depth é o quanto saiu do plano.
+    final sweep = (1 - math.cos(math.pi * animation.progress)) / 2;
+    final depth = math.sin(math.pi * animation.progress);
+
+    // O do fundo primeiro, para o da frente passar por cima dele.
+    final displaced = grid.at(animation.rowId, animation.displacedCol);
+    if (displaced != null) {
+      _drawBlock(
+        canvas,
+        displaced,
+        _orbit(animation.grabbedCol, animation.displacedCol, sweep),
+        top,
+        // Recuo contido de propósito: encolhendo e desbotando muito, o bloco
+        // do fundo desaparece atrás do da frente e o cruzamento vira buraco.
+        scale: 1 - 0.14 * depth,
+        recede: 0.18 * depth,
+      );
+    }
+
+    final grabbed = grid.at(animation.rowId, animation.grabbedCol);
+    if (grabbed != null) {
+      _drawBlock(
+        canvas,
+        grabbed,
+        _orbit(animation.displacedCol, animation.grabbedCol, sweep),
+        top,
+        scale: 1 + 0.3 * depth,
+      );
+    }
+  }
+
+  double _orbit(int from, int to, double sweep) =>
+      (from + (to - from) * sweep) * _cellSize;
+
+  /// Desenha o bloco centralizado na célula, com [scale] servindo de
+  /// perspectiva: maior quando está mais perto do jogador.
+  void _drawBlock(
+    Canvas canvas,
+    BlockColor block,
+    double left,
+    double top, {
+    double scale = 1,
+    double recede = 0,
+  }) {
+    final side = _cellSize * 0.9 * scale;
+    final rect = Rect.fromLTWH(
+      left + (_cellSize - side) / 2,
+      top + (_cellSize - side) / 2,
+      side,
+      side,
+    );
+    _blockPaint.color = recede > 0
+        ? Color.lerp(block.color, Palette.playfield, recede)!
+        : block.color;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(_cellSize * 0.18)),
+      _blockPaint,
+    );
+  }
+
   void _renderCursor(Canvas canvas) {
-    if (swap.cursorRow < 0 || swap.cursorRow >= _rows.length) {
+    final rowId = swapController.cursorRowId;
+    if (rowId == null || !grid.hasRow(rowId)) {
       return;
     }
     final rect = Rect.fromLTWH(
-      swap.cursorCol * _cellSize,
-      (swap.cursorRow - _riseOffset) * _cellSize,
+      swapController.cursorCol * _cellSize,
+      _topOf(grid.indexOf(rowId)),
       _cellSize * 2,
       _cellSize,
     ).deflate(2);
@@ -165,29 +250,6 @@ class BoardComponent extends PositionComponent with DragCallbacks {
       RRect.fromRectAndRadius(rect, Radius.circular(_cellSize * 0.22)),
       _cursorPaint,
     );
-  }
-
-  void _renderBlocks(Canvas canvas) {
-    final gap = _cellSize * 0.1;
-    final radius = Radius.circular(_cellSize * 0.18);
-
-    for (var row = 0; row < _rows.length; row++) {
-      final top = (row - _riseOffset) * _cellSize + gap / 2;
-      for (var col = 0; col < columns; col++) {
-        final block = _rows[row][col];
-        if (block == null) {
-          continue;
-        }
-        final rect = Rect.fromLTWH(
-          col * _cellSize + gap / 2,
-          top,
-          _cellSize - gap,
-          _cellSize - gap,
-        );
-        _blockPaint.color = block.color;
-        canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), _blockPaint);
-      }
-    }
   }
 
   void _renderDangerLine(Canvas canvas) {
@@ -201,30 +263,4 @@ class BoardComponent extends PositionComponent with DragCallbacks {
       x = end + gap;
     }
   }
-
-  void _fillInitialStack() {
-    _rows
-      ..clear()
-      ..addAll(
-        List.generate(
-          visibleRows + 1,
-          (_) => List<BlockColor?>.filled(columns, null),
-        ),
-      );
-
-    for (var col = 0; col < columns; col++) {
-      final height = 3 + _random.nextInt(4);
-      for (var i = 0; i < height; i++) {
-        _rows[visibleRows - 1 - i][col] = _randomBlock();
-      }
-    }
-
-    _rows[visibleRows] = _randomRow();
-  }
-
-  List<BlockColor?> _randomRow() =>
-      List<BlockColor?>.generate(columns, (_) => _randomBlock());
-
-  BlockColor _randomBlock() =>
-      BlockColor.values[_random.nextInt(BlockColor.values.length)];
 }

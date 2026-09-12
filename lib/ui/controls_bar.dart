@@ -22,8 +22,10 @@ class _ControlsBarState extends State<ControlsBar> {
   }
 
   void _togglePause() {
+
     final paused = !_paused;
     setState(() => _paused = paused);
+    
     if (paused) {
       widget.game.pauseEngine();
     } else {
