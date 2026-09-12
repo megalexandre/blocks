@@ -99,6 +99,10 @@ class SwapController {
       return;
     }
     final next = target > from ? from + 1 : from - 1;
+    // Bloco piscando ou estourando não se troca: ele já está em resolução.
+    if (!_swappable(rowId, from) || !_swappable(rowId, next)) {
+      return;
+    }
     grid.swap(rowId, from, next);
     _animation = SwapAnimation(
       rowId: rowId,
@@ -113,6 +117,9 @@ class SwapController {
     _dragRowId = null;
     _dragCol = null;
   }
+
+  /// Célula vazia pode receber bloco; bloco só sai se estiver parado.
+  bool _swappable(int rowId, int col) => grid.at(rowId, col)?.isIdle ?? true;
 
   int _clampCursor(int col) => col.clamp(0, grid.columns - 2);
 }

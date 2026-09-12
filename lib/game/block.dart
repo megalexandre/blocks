@@ -11,3 +11,36 @@ enum BlockColor {
 
   final Color color;
 }
+
+enum BlockState {
+  /// Parado na grade: pode ser trocado, cair e formar combinação.
+  idle,
+
+  /// Faz parte de uma combinação e está piscando, à espera de estourar.
+  matched,
+
+  /// Estourando. Ao fim é removido da grade.
+  popping,
+}
+
+class Block {
+  Block(this.color);
+
+  final BlockColor color;
+
+  BlockState state = BlockState.idle;
+
+  /// Tempo acumulado dentro do estado atual.
+  double stateTime = 0;
+
+  /// Espera antes de estourar, para o grupo sair em cascata em vez de tudo
+  /// de uma vez.
+  double popDelay = 0;
+
+  bool get isIdle => state == BlockState.idle;
+
+  void enter(BlockState next) {
+    state = next;
+    stateTime = 0;
+  }
+}

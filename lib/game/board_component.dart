@@ -1,17 +1,20 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flame/components.dart';
+// O Flame também exporta um Block, sem relação com o nosso.
+import 'package:flame/components.dart' hide Block;
 import 'package:flame/events.dart';
 
 import '../ui/palette.dart';
 import 'block.dart';
 import 'block_grid.dart';
+import 'match_resolver.dart';
 import 'stack_raiser.dart';
 import 'swap_controller.dart';
 
 /// O tabuleiro na tela: tempo, geometria, toque e pintura. O estado dos blocos
-/// é do [BlockGrid]; as regras de troca são do [SwapController].
+/// é do [BlockGrid], as regras de troca são do [SwapController] e as
+/// combinações são do [MatchResolver].
 class BoardComponent extends PositionComponent with DragCallbacks {
   BoardComponent({required this.stackRaiser});
 
@@ -34,6 +37,10 @@ class BoardComponent extends PositionComponent with DragCallbacks {
   final grid = BlockGrid(columns: columns, rowCount: visibleRows + 1);
 
   late final swapController = SwapController(grid: grid);
+  late final matchResolver = MatchResolver(grid: grid);
+
+  /// Quantas vezes o bloco combinado pisca por segundo.
+  static const double flashHz = 6;
 
   double _riseOffset = 0;
   double _cellSize = 24;
@@ -78,6 +85,7 @@ class BoardComponent extends PositionComponent with DragCallbacks {
       grid.applyGravityStep();
     }
 
+    matchResolver.update(dt);
     swapController.update(dt);
   }
 
@@ -154,7 +162,14 @@ class BoardComponent extends PositionComponent with DragCallbacks {
         }
         final block = grid.atIndex(index, col);
         if (block != null) {
-          _drawBlock(canvas, block, col * _cellSize, _topOf(index));
+          final look = _lookOf(block);
+          _drawBlock(
+            canvas,
+            look.color,
+            col * _cellSize,
+            _topOf(index),
+            scale: look.scale,
+          );
         }
       }
     }
@@ -184,13 +199,12 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     if (displaced != null) {
       _drawBlock(
         canvas,
-        displaced,
-        _orbit(animation.grabbedCol, animation.displacedCol, sweep),
-        top,
         // Recuo contido de propósito: encolhendo e desbotando muito, o bloco
         // do fundo desaparece atrás do da frente e o cruzamento vira buraco.
+        Color.lerp(displaced.color.color, Palette.playfield, 0.18 * depth)!,
+        _orbit(animation.grabbedCol, animation.displacedCol, sweep),
+        top,
         scale: 1 - 0.14 * depth,
-        recede: 0.18 * depth,
       );
     }
 
@@ -198,7 +212,7 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     if (grabbed != null) {
       _drawBlock(
         canvas,
-        grabbed,
+        grabbed.color.color,
         _orbit(animation.displacedCol, animation.grabbedCol, sweep),
         top,
         scale: 1 + 0.3 * depth,
@@ -206,19 +220,46 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     }
   }
 
+  /// Como o bloco aparece, conforme o estado: parado mostra a própria cor,
+  /// combinado pisca no branco, e estourando encolhe até sair.
+  ({Color color, double scale}) _lookOf(Block block) {
+    switch (block.state) {
+      case BlockState.idle:
+        return (color: block.color.color, scale: 1.0);
+      case BlockState.matched:
+        final piscada =
+            (math.sin(block.stateTime * flashHz * 2 * math.pi) + 1) / 2;
+        return (
+          color: Color.lerp(block.color.color, Palette.flash, piscada)!,
+          scale: 1.0,
+        );
+      case BlockState.popping:
+        if (block.stateTime < block.popDelay) {
+          return (color: Palette.flash, scale: 1.0);
+        }
+        final saindo =
+            ((block.stateTime - block.popDelay) / MatchResolver.popDuration)
+                .clamp(0.0, 1.0);
+        return (color: Palette.flash, scale: 1 - saindo);
+    }
+  }
+
   double _orbit(int from, int to, double sweep) =>
       (from + (to - from) * sweep) * _cellSize;
 
-  /// Desenha o bloco centralizado na célula, com [scale] servindo de
-  /// perspectiva: maior quando está mais perto do jogador.
+  /// Desenha um bloco centralizado na célula. Quem chama decide a cor e a
+  /// escala — na animação de troca a escala é perspectiva, no estouro é o
+  /// bloco encolhendo.
   void _drawBlock(
     Canvas canvas,
-    BlockColor block,
+    Color color,
     double left,
     double top, {
     double scale = 1,
-    double recede = 0,
   }) {
+    if (scale <= 0) {
+      return;
+    }
     final side = _cellSize * 0.9 * scale;
     final rect = Rect.fromLTWH(
       left + (_cellSize - side) / 2,
@@ -226,9 +267,7 @@ class BoardComponent extends PositionComponent with DragCallbacks {
       side,
       side,
     );
-    _blockPaint.color = recede > 0
-        ? Color.lerp(block.color, Palette.playfield, recede)!
-        : block.color;
+    _blockPaint.color = color;
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, Radius.circular(_cellSize * 0.18)),
       _blockPaint,
