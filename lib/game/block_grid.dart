@@ -2,6 +2,12 @@ import 'dart:math' as math;
 
 import 'block.dart';
 
+/// Direção de varredura na grade: quanto andar em linha e em coluna por passo.
+typedef GridStep = ({int index, int col});
+
+const GridStep _horizontal = (index: 0, col: 1);
+const GridStep _vertical = (index: 1, col: 0);
+
 /// Estado da grade: quem está em cada célula, e as regras de que a grade é
 /// dona — troca e queda. Não sabe nada de pixel nem de tempo.
 ///
@@ -10,8 +16,11 @@ import 'block.dart';
 /// para a mesma linha. Use [hasRow] antes de ler um id guardado, porque a
 /// linha pode já ter saído pelo topo.
 class BlockGrid {
+
   BlockGrid({required this.columns, required this.rowCount}) {
-    _fillInitial();
+    _allocateEmptyRows();
+    _dealStartingStack();
+    _fillRow(incomingIndex);
   }
 
   final int columns;
@@ -21,6 +30,17 @@ class BlockGrid {
 
   /// Quantos iguais em sequência formam uma combinação.
   static const int matchLength = 3;
+
+  /// Altura da pilha inicial, em linhas, sorteada por coluna.
+  static const int minStartHeight = 3;
+  static const int maxStartHeight = 6;
+
+  /// A linha que está entrando por baixo, ainda fora da área visível. Ela é
+  /// inerte: não combina nem cai, e serve de piso para a pilha.
+  int get incomingIndex => rowCount - 1;
+
+  /// Última linha jogável — a mais baixa que o jogador enxerga e manipula.
+  int get floorIndex => rowCount - 2;
 
   final _random = math.Random();
 
@@ -64,13 +84,12 @@ class BlockGrid {
     _rows.removeAt(0);
     _rows.add(List<Block?>.filled(columns, null));
     _consumedRows++;
-    _fillRow(rowCount - 1);
+    _fillRow(incomingIndex);
   }
 
-  /// Existe bloco no ar, ainda caindo. A última linha é o piso, então ela não
-  /// conta.
+  /// Existe bloco no ar, ainda caindo.
   bool get hasFallingBlocks {
-    for (var index = 0; index < rowCount - 1; index++) {
+    for (var index = 0; index < incomingIndex; index++) {
       for (var col = 0; col < columns; col++) {
         if (_rows[index][col] != null && _rows[index + 1][col] == null) {
           return true;
@@ -80,10 +99,10 @@ class BlockGrid {
     return false;
   }
 
-  /// Desce em uma linha todo bloco que não tem apoio. A última linha é o piso.
-  /// Bloco piscando ou estourando não cai.
+  /// Desce em uma linha todo bloco que não tem apoio. Bloco piscando ou
+  /// estourando não cai.
   void applyGravityStep() {
-    for (var index = _rows.length - 2; index >= 0; index--) {
+    for (var index = floorIndex; index >= 0; index--) {
       for (var col = 0; col < columns; col++) {
         final block = _rows[index][col];
         if (block != null && block.isIdle && _rows[index + 1][col] == null) {
@@ -94,25 +113,32 @@ class BlockGrid {
     }
   }
 
-  void _fillInitial() {
+  void _allocateEmptyRows() {
     _rows
       ..clear()
-      ..addAll(List.generate(rowCount, (_) => List<Block?>.filled(columns, null)));
+      ..addAll(
+        List.generate(rowCount , (_) => List<Block?>.filled(columns, null)),
+      );
+  }
 
-    // A última linha é a que está entrando; a pilha começa na penúltima.
-    final floorIndex = rowCount - 2;
-    final heights = List.generate(columns, (_) => 3 + _random.nextInt(4));
-    // De baixo para cima, para cada bloco já ver os vizinhos que o cercam.
-    for (var i = 0; i < heights.reduce(math.max); i++) {
+  /// Pilha de abertura: cada coluna recebe uma altura sorteada, para o
+  /// tabuleiro não começar com o topo reto.
+  void _dealStartingStack() {
+    final heights = List.generate(columns, (_) => _randomStartHeight());
+    final tallest = heights.reduce(math.max);
+    // Camada por camada, a partir do piso.
+    for (var layer = 0; layer < tallest; layer++) {
+      final index = floorIndex - layer;
       for (var col = 0; col < columns; col++) {
-        if (i < heights[col]) {
-          _rows[floorIndex - i][col] = Block(_colorFor(floorIndex - i, col));
+        if (layer < heights[col]) {
+          _rows[index][col] = Block(_colorFor(index, col));
         }
       }
     }
-
-    _fillRow(rowCount - 1);
   }
+
+  int _randomStartHeight() =>
+      minStartHeight + _random.nextInt(maxStartHeight - minStartHeight + 1);
 
   void _fillRow(int index) {
     for (var col = 0; col < columns; col++) {
@@ -124,31 +150,45 @@ class BlockGrid {
   /// tabuleiro estouraria sozinho no primeiro frame, e cada linha nova
   /// entraria já estourando.
   BlockColor _colorFor(int index, int col) {
-    final candidatas = BlockColor.values
-        .where((cor) => !_wouldMatch(index, col, cor))
+    final candidates = BlockColor.values
+        .where((color) => !_wouldMatch(index, col, color))
         .toList();
-    final origem = candidatas.isEmpty ? BlockColor.values : candidatas;
-    return origem[_random.nextInt(origem.length)];
+    // Horizontal e vertical bloqueiam no máximo duas cores cada, então com
+    // cinco cores sempre sobra alguma.
+    assert(candidates.isNotEmpty, 'nenhuma cor livre em ($index, $col)');
+    return candidates[_random.nextInt(candidates.length)];
   }
 
-  bool _wouldMatch(int index, int col, BlockColor cor) =>
-      _sameRun(index, col, cor, 0, -1) + 1 >= matchLength ||
-      _sameRun(index, col, cor, -1, 0) + 1 >= matchLength ||
-      _sameRun(index, col, cor, 1, 0) + 1 >= matchLength;
+  bool _wouldMatch(int index, int col, BlockColor color) =>
+      _runThrough(index, col, color, _horizontal) >= matchLength ||
+      _runThrough(index, col, color, _vertical) >= matchLength;
 
-  /// Quantos blocos da cor [cor] existem em sequência a partir de
-  /// (index, col), andando de [stepIndex], [stepCol].
-  int _sameRun(int index, int col, BlockColor cor, int stepIndex, int stepCol) {
+  /// Tamanho da sequência de [color] que passaria por (index, col) na direção
+  /// [step]. Soma os dois lados mais o próprio bloco que está sendo colocado —
+  /// por isso independe da ordem em que a grade é preenchida. Checar um lado
+  /// de cada vez deixaria passar o bloco colocado entre dois iguais.
+  int _runThrough(int index, int col, BlockColor color, GridStep step) {
+    final before = _sameRun(index, col, color, (
+      index: -step.index,
+      col: -step.col,
+    ));
+    final after = _sameRun(index, col, color, step);
+    return before + 1 + after;
+  }
+
+  /// Quantos blocos da cor [color] existem em sequência a partir de
+  /// (index, col), sem contar ele próprio, andando de [step] em [step].
+  int _sameRun(int index, int col, BlockColor color, GridStep step) {
     var total = 0;
-    var i = index + stepIndex;
-    var c = col + stepCol;
+    var i = index + step.index;
+    var c = col + step.col;
     while (i >= 0 && i < rowCount && c >= 0 && c < columns) {
-      if (_rows[i][c]?.color != cor) {
+      if (_rows[i][c]?.color != color) {
         break;
       }
       total++;
-      i += stepIndex;
-      c += stepCol;
+      i += step.index;
+      c += step.col;
     }
     return total;
   }

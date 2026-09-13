@@ -57,7 +57,16 @@ class BoardComponent extends PositionComponent with DragCallbacks {
 
   final _panelPaint = Paint()..color = Palette.playfield;
   final _blockPaint = Paint();
-  final _glyphPaint = Paint()..isAntiAlias = true;
+  final _glyphPaint = Paint()
+    ..isAntiAlias = true
+    ..filterQuality = FilterQuality.medium;
+
+  late final GlyphMasks _glyphMasks;
+
+  @override
+  Future<void> onLoad() async {
+    _glyphMasks = await GlyphMasks.rasterize();
+  }
   final _dangerPaint = Paint()
     ..color = Palette.dangerLine
     ..strokeWidth = 2
@@ -128,9 +137,10 @@ class BoardComponent extends PositionComponent with DragCallbacks {
     if (localX < 0 || localY < 0 || localX >= size.x || localY >= size.y) {
       return null;
     }
+    // Até o piso, nunca a linha que está entrando: ela ainda não está em jogo.
     final index = (localY / _cellSize + _riseOffset).floor().clamp(
       0,
-      grid.rowCount - 1,
+      grid.floorIndex,
     );
     return (col: _columnAt(canvasPoint.x), rowId: grid.rowIdAt(index));
   }
@@ -289,9 +299,15 @@ class BoardComponent extends PositionComponent with DragCallbacks {
       _blockPaint,
     );
 
-    _glyphPaint.color = Color.lerp(color, Palette.playfield, glyphShade)!;
-    canvas.drawPath(
-      glyph.pathIn(
+    final mask = _glyphMasks[glyph];
+    _glyphPaint.colorFilter = ColorFilter.mode(
+      Color.lerp(color, Palette.playfield, glyphShade)!,
+      BlendMode.srcIn,
+    );
+    canvas.drawImageRect(
+      mask,
+      Rect.fromLTWH(0, 0, mask.width.toDouble(), mask.height.toDouble()),
+      GlyphMasks.destinationFor(
         Rect.fromCenter(
           center: rect.center,
           width: side * glyphSize,

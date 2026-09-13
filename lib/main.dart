@@ -1,11 +1,14 @@
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'game/blocos_game.dart';
 import 'ui/controls_bar.dart';
 import 'ui/palette.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
   runApp(const BlocosApp());
 }
 

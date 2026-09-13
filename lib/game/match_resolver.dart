@@ -32,7 +32,7 @@ class MatchResolver {
   }
 
   bool _anyResolving() {
-    for (var index = 0; index < grid.rowCount - 1; index++) {
+    for (var index = 0; index < grid.incomingIndex; index++) {
       for (var col = 0; col < grid.columns; col++) {
         final block = grid.atIndex(index, col);
         if (block != null && !block.isIdle) {
@@ -44,8 +44,7 @@ class MatchResolver {
   }
 
   void _advance(double dt) {
-    // A última linha é a que está entrando por baixo e fica inerte.
-    for (var index = 0; index < grid.rowCount - 1; index++) {
+    for (var index = 0; index < grid.incomingIndex; index++) {
       for (var col = 0; col < grid.columns; col++) {
         final block = grid.atIndex(index, col);
         if (block == null || block.isIdle) {
@@ -70,7 +69,7 @@ class MatchResolver {
 
   void _detect() {
     final matched = <Cell>{};
-    for (var index = 0; index < grid.rowCount - 1; index++) {
+    for (var index = 0; index < grid.incomingIndex; index++) {
       _collectRun(matched, index, 0, 0, 1);
     }
     for (var col = 0; col < grid.columns; col++) {
@@ -97,7 +96,7 @@ class MatchResolver {
   /// guarda em [matched] toda sequência de [BlockGrid.matchLength] ou mais da
   /// mesma cor.
   void _collectRun(Set<Cell> matched, int index, int col, int stepIndex, int stepCol) {
-    final limite = stepCol != 0 ? grid.columns : grid.rowCount - 1;
+    final limite = stepCol != 0 ? grid.columns : grid.incomingIndex;
     var inicio = 0;
     BlockColor? corAtual;
 

@@ -1,11 +1,10 @@
 {
   "version": "0.2.0",
   "configurations": [
-
     {
-      "name": "blocos (Linux)",
+      "name": "blocos",
       "request": "launch",
-      "type": "node",
+      "type": "dart",
       "program": "lib/main.dart"
     }
   ]

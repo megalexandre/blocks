@@ -1,0 +1,56 @@
+{
+  "name": "Blocos (Flutter)",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "ubuntu",
+
+  // Não é só conveniência: o cookie do X11 é 0600 do seu usuário, então sem
+  // igualar o uid o container não consegue lê-lo e a janela não abre.
+  "updateRemoteUserUID": true,
+
+  // A janela do app abre na sua tela: monta o socket X11 do host e leva o
+  // cookie de autorização do GDM junto.
+  "containerEnv": {
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "XAUTHORITY": "/tmp/.host-Xauthority"
+  },
+  "mounts": [
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+    "source=${localEnv:XAUTHORITY},target=/tmp/.host-Xauthority,type=bind,readonly",
+    // Volumes nomeados: o cache de pacotes e o do Gradle sobrevivem a recriar
+    // o container, e não sujam o diretório do projeto no host.
+    "source=blocos-pub-cache,target=/home/ubuntu/.pub-cache,type=volume",
+    "source=blocos-gradle,target=/home/ubuntu/.gradle,type=volume"
+  ],
+
+  // Os volumes nascem do docker como root; sem isso o pub e o gradle não
+  // conseguem escrever.
+  "postCreateCommand": "sudo chown -R ubuntu:ubuntu /home/ubuntu/.pub-cache /home/ubuntu/.gradle && flutter pub get",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Dart-Code.dart-code",
+        "Dart-Code.flutter",
+        "usernamehw.errorlens",
+        "Nash.awesome-flutter-snippets"
+      ],
+      "settings": {
+        // Essencial: sem apontar o SDK que existe *dentro* do container, o
+        // servidor de análise não sobe e autocomplete e ir-para-definição
+        // falham em silêncio. O caminho do host não existe aqui.
+        "dart.flutterSdkPath": "/sdks/flutter",
+        "dart.previewFlutterUiGuides": true,
+        "editor.formatOnSave": true,
+        "[dart]": {
+          "editor.defaultFormatter": "Dart-Code.dart-code",
+          "editor.rulers": [80],
+          "editor.selectionHighlight": false,
+          "editor.tabCompletion": "onlySnippets",
+          "editor.wordBasedSuggestions": "off"
+        }
+      }
+    }
+  }
+}
