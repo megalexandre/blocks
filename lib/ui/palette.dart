@@ -1,13 +1,17 @@
 import 'dart:ui';
 
 abstract final class Palette {
-  static const background = Color(0xFF0B0E17);
-  static const playfield = Color(0xFF131829);
-  static const dangerLine = Color(0xB3D9DDF6);
-  static const cursor = Color(0xFFF4F6FF);
-  static const flash = Color(0xFFFDFDFF);
-  static const controlIcon = Color(0xFFD9DDF6);
-  static const controlIdle = Color(0xFF1A2034);
-  static const controlPressed = Color(0xFF2A3350);
-  static const controlBorder = Color(0xFF2A3350);
+  static const background = Color(0xFFF3ECE3);
+  static const playfield = Color(0xFFEAE0D2);
+  static const playfieldBorder = Color(0xFFD9CBB8);
+  static const emptyCell = Color(0xFFD9CBB8);
+  static const dangerLine = Color(0xFFB7A692);
+  static const flash = Color(0xFFFFFFFF);
+
+  static const textPrimary = Color(0xFF3A3348);
+
+  /// Cartão claro por cima do painel — placar, faixa de chain, painel de
+  /// game over.
+  static const cardBackground = Color(0xFFFBF6EF);
+  static const cardBorder = Color(0xFFD9CBB8);
 }

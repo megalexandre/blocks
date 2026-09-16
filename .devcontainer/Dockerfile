@@ -62,3 +62,16 @@ USER root
 RUN chmod -R a+rwX "$FLUTTER_ROOT" \
     && git config --system --add safe.directory "$FLUTTER_ROOT"
 USER $USERNAME
+
+# Claude Code. O instalador nativo põe o binário em ~/.local/bin, que só entra
+# no PATH de shells de login; sem o ENV o terminal do VS Code não o encontra.
+#
+# O CLAUDE_CONFIG_DIR leva o .claude.json para dentro de ~/.claude, que é um
+# volume; sem ele o arquivo fica em ~ e se perde a cada rebuild. Precisa vir
+# antes do instalador: o volume nasce com uma cópia deste diretório (e o dono
+# dele), e um instalador sem a variável deixaria o primeiro `claude`
+# reclamando de configuração ausente.
+ENV CLAUDE_CONFIG_DIR=/home/$USERNAME/.claude \
+    PATH=/home/$USERNAME/.local/bin:$PATH
+RUN mkdir -p "$CLAUDE_CONFIG_DIR" \
+    && curl -fsSL https://claude.ai/install.sh | bash

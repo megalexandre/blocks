@@ -23,6 +23,18 @@ class BlockGrid {
     _fillRow(incomingIndex);
   }
 
+  /// Só para teste: começa com a grade vazia, sem pilha nem linha de entrada
+  /// sorteadas, para montar cenários determinísticos com [place].
+  BlockGrid.empty({required this.columns, required this.rowCount}) {
+    _allocateEmptyRows();
+  }
+
+  /// Só para teste: põe (ou remove, com `null`) um bloco numa célula, sem
+  /// passar pelo sorteio de cor.
+  void place(int index, int col, BlockColor? color) {
+    _rows[index][col] = color == null ? null : Block(color);
+  }
+
   final int columns;
 
   /// Linhas mantidas em memória: as visíveis mais a que está entrando por baixo.
@@ -108,6 +120,7 @@ class BlockGrid {
         if (block != null && block.isIdle && _rows[index + 1][col] == null) {
           _rows[index + 1][col] = block;
           _rows[index][col] = null;
+          block.fallOffset += 1;
         }
       }
     }

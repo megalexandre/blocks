@@ -25,10 +25,48 @@ class MatchResolver {
 
   bool _resolving = false;
 
+  /// Quantos blocos saíram juntos na última combinação encontrada. Volta a 0
+  /// quando a pilha assenta ociosa, sem nada piscando, estourando ou caindo.
+  int get comboSize => _comboSize;
+
+  /// Nível da chain atual: 1 na primeira combinação depois da pilha ficar
+  /// ociosa, e sobe uma a cada combinação nova que aparece antes da pilha
+  /// assentar de novo — o caso em que blocos caindo de uma combinação anterior
+  /// fecham outra. Volta a 0 quando a pilha assenta ociosa.
+  int get chainLevel => _chainLevel;
+
+  int _comboSize = 0;
+  int _chainLevel = 0;
+
+  /// Verdadeiro desde a primeira combinação da chain até a pilha assentar
+  /// ociosa de novo. Precisa ser um flag que persiste entre frames — no frame
+  /// em que o último bloco de uma queda pousa e fecha a combinação seguinte,
+  /// ele já não está mais caindo nem nada está piscando, então checar só o
+  /// estado do frame atual perderia a chain nesse instante exato.
+  bool _chainActive = false;
+
+  /// Avisado a cada combinação nova, com o tamanho do grupo e o nível da
+  /// chain. Quem soma pontos ouve aqui em vez de espiar [comboSize] a cada
+  /// frame — os dois campos ficam parados por vários frames enquanto a
+  /// combinação pisca e estoura, e um placar que somasse por frame contaria a
+  /// mesma combinação várias vezes.
+  void Function(int comboSize, int chainLevel)? onMatch;
+
   void update(double dt) {
     _advance(dt);
-    _detect();
+    final matchedNow = _detect();
+    if (matchedNow > 0) {
+      _comboSize = matchedNow;
+      _chainLevel = _chainActive ? _chainLevel + 1 : 1;
+      _chainActive = true;
+      onMatch?.call(_comboSize, _chainLevel);
+    }
     _resolving = _anyResolving();
+    if (!_resolving && !grid.hasFallingBlocks) {
+      _chainActive = false;
+      _comboSize = 0;
+      _chainLevel = 0;
+    }
   }
 
   bool _anyResolving() {
@@ -67,7 +105,9 @@ class MatchResolver {
     }
   }
 
-  void _detect() {
+  /// Marca em [BlockState.matched] toda combinação nova encontrada agora, e
+  /// devolve quantos blocos entraram nela (0 se não achou nenhuma).
+  int _detect() {
     final matched = <Cell>{};
     for (var index = 0; index < grid.incomingIndex; index++) {
       _collectRun(matched, index, 0, 0, 1);
@@ -76,7 +116,7 @@ class MatchResolver {
       _collectRun(matched, 0, col, 1, 0);
     }
     if (matched.isEmpty) {
-      return;
+      return 0;
     }
 
     // Cascata da esquerda para a direita, de baixo para cima.
@@ -90,6 +130,7 @@ class MatchResolver {
       block.enter(BlockState.matched);
       block.popDelay = i * popStagger;
     }
+    return ordem.length;
   }
 
   /// Caminha a partir de (index, col) no sentido [stepIndex], [stepCol] e

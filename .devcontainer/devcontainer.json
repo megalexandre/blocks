@@ -5,27 +5,49 @@
   },
   "remoteUser": "ubuntu",
 
+  // Prepara no host o que os mounts abaixo esperam encontrar, para o container
+  // subir em qualquer máquina (ver o script).
+  "initializeCommand": "sh \"${localWorkspaceFolder}/.devcontainer/initialize.sh\"",
+
+  // O projeto fica no mesmo caminho do host, seja qual for. O Claude guarda
+  // conversas e memória numa pasta cujo nome vem do caminho do projeto: num
+  // caminho fixo como /workspaces/blocos ele não enxergaria nada do host.
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
+
   // Não é só conveniência: o cookie do X11 é 0600 do seu usuário, então sem
   // igualar o uid o container não consegue lê-lo e a janela não abre.
   "updateRemoteUserUID": true,
 
-  // A janela do app abre na sua tela: monta o socket X11 do host e leva o
-  // cookie de autorização do GDM junto.
+  // A janela do app abre na sua tela: monta o socket X11 do host e a pasta
+  // com o cookie de autorização que o initialize.sh prepara.
+  //
+  // Sem /dev/dri no container, o Mesa trava tentando negociar DRI2/EGL por
+  // hardware antes de desistir (a janela nunca chega a abrir). Força
+  // renderização por software para pular essa negociação.
   "containerEnv": {
     "DISPLAY": "${localEnv:DISPLAY}",
-    "XAUTHORITY": "/tmp/.host-Xauthority"
+    "XAUTHORITY": "/tmp/.host-x11/Xauthority",
+    "LIBGL_ALWAYS_SOFTWARE": "1"
   },
   "mounts": [
     "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
-    "source=${localEnv:XAUTHORITY},target=/tmp/.host-Xauthority,type=bind,readonly",
+    "source=${localEnv:HOME}/.cache/blocos-devcontainer,target=/tmp/.host-x11,type=bind,readonly",
     // Volumes nomeados: o cache de pacotes e o do Gradle sobrevivem a recriar
     // o container, e não sujam o diretório do projeto no host.
     "source=blocos-pub-cache,target=/home/ubuntu/.pub-cache,type=volume",
-    "source=blocos-gradle,target=/home/ubuntu/.gradle,type=volume"
+    "source=blocos-gradle,target=/home/ubuntu/.gradle,type=volume",
+    // Claude: login e config do container ficam num volume; conversas e
+    // memória vêm do host, para o `claude --resume` achar as mesmas dos dois
+    // lados. O resto do ~/.claude do host fica de fora: lockfiles da IDE e o
+    // registro de sessões apontam para pids e portas que só existem no host.
+    "source=blocos-claude,target=/home/ubuntu/.claude,type=volume",
+    "source=${localEnv:HOME}/.claude/projects,target=/home/ubuntu/.claude/projects,type=bind"
   ],
 
   // Os volumes nascem do docker como root; sem isso o pub e o gradle não
-  // conseguem escrever.
+  // conseguem escrever. O do Claude não precisa: o diretório já existe na
+  // imagem, e o volume herda o dono dele.
   "postCreateCommand": "sudo chown -R ubuntu:ubuntu /home/ubuntu/.pub-cache /home/ubuntu/.gradle && flutter pub get",
 
   "customizations": {
@@ -34,7 +56,8 @@
         "Dart-Code.dart-code",
         "Dart-Code.flutter",
         "usernamehw.errorlens",
-        "Nash.awesome-flutter-snippets"
+        "Nash.awesome-flutter-snippets",
+        "anthropic.claude-code"
       ],
       "settings": {
         // Essencial: sem apontar o SDK que existe *dentro* do container, o

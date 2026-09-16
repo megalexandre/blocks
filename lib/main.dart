@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'game/blocos_game.dart';
-import 'ui/controls_bar.dart';
 import 'ui/palette.dart';
 
 void main() {
@@ -29,14 +28,7 @@ class _BlocosAppState extends State<BlocosApp> {
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         backgroundColor: Palette.background,
-        body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(child: GameWidget(game: _game)),
-              ControlsBar(game: _game),
-            ],
-          ),
-        ),
+        body: SafeArea(child: GameWidget(game: _game)),
       ),
     );
   }
