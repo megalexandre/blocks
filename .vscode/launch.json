@@ -2,10 +2,14 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "blocos",
+      "name": "Run linux",
       "request": "launch",
       "type": "dart",
-      "program": "lib/main.dart"
+      "program": "lib/main.dart",
+      "deviceId": "linux",
+      "env": {
+        "LIBGL_ALWAYS_SOFTWARE": "1"
+      }
     }
   ]
 }

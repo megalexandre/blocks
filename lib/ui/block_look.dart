@@ -11,18 +11,18 @@ class BlockLook {
   final Color dark;
 
   /// Coluna (0-5) do bloco dentro de `assets/images/blocks.png`, um sprite
-  /// sheet de 6 tiles de 128×128: vermelho-coração, verde-círculo,
-  /// ciano-gota (sem cor correspondente no jogo, não usado), azul-triângulo,
-  /// amarelo-estrela, roxo-losango.
+  /// sheet de 6 tiles de 128×128, nesta ordem: vermelho-coração,
+  /// verde-círculo, ciano-gota (sem cor correspondente no jogo, não usado),
+  /// roxo-losango, amarelo-estrela, azul-triângulo.
   final int spriteColumn;
 }
 
 const Map<BlockColor, BlockLook> blockLooks = {
   BlockColor.red: BlockLook(dark: Color(0xFFC97C88), spriteColumn: 0),
-  BlockColor.blue: BlockLook(dark: Color(0xFF6E9BC0), spriteColumn: 3),
+  BlockColor.blue: BlockLook(dark: Color(0xFF6E9BC0), spriteColumn: 5),
   BlockColor.green: BlockLook(dark: Color(0xFF6FAE8C), spriteColumn: 1),
   BlockColor.yellow: BlockLook(dark: Color(0xFFC7AD6A), spriteColumn: 4),
-  BlockColor.purple: BlockLook(dark: Color(0xFF9C7EB8), spriteColumn: 5),
+  BlockColor.purple: BlockLook(dark: Color(0xFF9C7EB8), spriteColumn: 3),
 };
 
 extension BlockColorLook on BlockColor {

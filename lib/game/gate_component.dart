@@ -1,5 +1,6 @@
 import 'package:flame/components.dart';
 
+import 'dressing/game_assets.dart';
 import 'layout.dart';
 
 /// Fundo da tela inteira: a arte do gate, fixa, atrás de todo o resto.
@@ -11,6 +12,6 @@ class GateComponent extends SpriteComponent {
 
   @override
   Future<void> onLoad() async {
-    sprite = await Sprite.load('gate_full_screen.png');
+    sprite = await Sprite.load(GameAsset.gate.fileName);
   }
 }

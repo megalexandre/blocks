@@ -3,6 +3,7 @@ import 'package:flame/effects.dart';
 import 'package:flutter/animation.dart' show Curves;
 
 import 'board_component.dart';
+import 'dressing/game_assets.dart';
 import 'layout.dart';
 
 /// Cobre o board para esconder os blocos antes da partida. Desliza para
@@ -20,7 +21,7 @@ class WallComponent extends SpriteComponent {
 
   @override
   Future<void> onLoad() async {
-    sprite = await Sprite.load('wall.png');
+    sprite = await Sprite.load(GameAsset.wall.fileName);
     final layout = BoardComponent.layoutFor();
     size = layout.size;
     position = _coveringPosition(layout.position);

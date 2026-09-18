@@ -11,6 +11,8 @@ import '../ui/block_look.dart';
 import '../ui/palette.dart';
 import 'block.dart';
 import 'block_grid.dart';
+import 'dressing/selector.dart';
+import 'dressing/game_assets.dart';
 import 'layout.dart';
 import 'match_resolver.dart';
 import 'score.dart';
@@ -53,7 +55,7 @@ class BoardComponent extends PositionComponent
   double _cellSize = 24;
   double _fallTimer = 0;
 
-  /// Lado de cada tile em `assets/images/blocks.png` — o sprite sheet dos
+  /// Lado de cada tile em `assets/images/blocks/blocks.png` — o sprite sheet dos
   /// blocos, 6 colunas de 128×128 (ver [BlockLook.spriteColumn]).
   static const double spriteTileSize = 128;
 
@@ -67,44 +69,32 @@ class BoardComponent extends PositionComponent
     ..style = PaintingStyle.stroke
     ..strokeWidth = 2
     ..color = Palette.playfieldBorder;
-  final _emptyCellPaint = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = 1
-    ..color = Palette.emptyCell;
-  // Sem anti-aliasing: blocos vizinhos ficam colados borda a borda, e a
-  // pilha sobe em fração contínua de pixel a cada frame (StackRaiser). Com
-  // AA ligado, a borda de cada bloco suaviza contra o fundo de forma
-  // independente do vizinho — e como a fração muda a cada frame, abre uma
-  // frestinha de fundo entre os dois que treme/pisca. Sem AA a borda é dura
-  // e os dois colam sem frincha, além de combinar mais com pixel art.
+  // Tile de 128px desenhado em ~50px de tela (redução de ~2,6×). Com
+  // `none` a amostragem é nearest-neighbor: descarta a maioria dos texels
+  // de origem, e *quais* ela descarta muda conforme a pilha sobe em fração
+  // de pixel — detalhe de 1px (contorno, brilho) pisca. `medium` usa
+  // mipmap, que pré-média a origem: o resultado para de depender da fase
+  // sub-pixel. A frincha entre blocos vizinhos não volta porque quem
+  // resolve isso é o arredondamento de [_topOf], que faz blocos vizinhos
+  // caírem sempre no mesmo pixel de tela.
   final _spritePaint = Paint()
-    ..isAntiAlias = false
-    ..filterQuality = FilterQuality.none;
-  final _overlayPaint = Paint()..isAntiAlias = false;
+    ..isAntiAlias = true
+    ..filterQuality = FilterQuality.medium;
+  final _overlayPaint = Paint()..isAntiAlias = true;
 
   late final Image _blocksImage;
-  late final Image _selectorImage;
+  final _selector = Selector();
 
   @override
   Future<void> onLoad() async {
-    _blocksImage = await Flame.images.load('blocks.png');
-    _selectorImage = await Flame.images.load('selector.png');
+    _blocksImage = await Flame.images.load(GameAsset.blocks.fileName);
+    await _selector.load();
   }
 
   final _dangerPaint = Paint()
     ..color = Palette.dangerLine
     ..strokeWidth = 2
     ..strokeCap = StrokeCap.round;
-
-  // Ao contrário do sprite dos blocos (preenchimento sólido, sem AA/filtro
-  // de propósito pra colar borda a borda sem frincha): o seletor é uma
-  // imagem de linhas finas bem reduzida de tamanho, e a pilha sobe em
-  // fração contínua de pixel. Sem filtro, a amostragem pula texels de
-  // origem diferentes a cada frame — a linha treme. Com AA e filtro
-  // melhor, o sub-pixel vira interpolação suave em vez de degrau.
-  final _cursorPaint = Paint()
-    ..isAntiAlias = true
-    ..filterQuality = FilterQuality.medium;
 
   /// Geometria do board: célula, tamanho e posição. A largura vem do vão da
   /// porta na arte do gate ([GameLayout.boardVoidWidth]) — o board precisa
@@ -213,8 +203,22 @@ class BoardComponent extends PositionComponent
   int _columnAt(double worldX) =>
       ((worldX - position.x) / _cellSize).floor().clamp(0, columns - 1);
 
-  /// Topo da linha que está no índice visual [index].
-  double _topOf(int index) => (index - _riseOffset) * _cellSize;
+  /// Topo da linha que está no índice visual [index], arredondado para
+  /// pixel inteiro de tela.
+  ///
+  /// A pilha sobe ~0,1 pixel de tela por frame. Em posição fracionária os
+  /// traços finos (contorno do bloco, linha do selector) não cabem num
+  /// pixel exato: a cada frame a amostragem ora concentra o traço em 1
+  /// pixel, ora espalha em 2, e a espessura pulsa — medido, a cobertura do
+  /// selector oscilava 6% num ciclo de ~160ms (~6Hz). É isso que se vê
+  /// como tremor; o deslocamento em si já era contínuo. Arredondando, a
+  /// cena inteira anda junta de 1 em 1 pixel e cada quadro sai idêntico ao
+  /// anterior — o passo é pequeno e lento demais para aparecer.
+  double _topOf(int index) {
+    final top = (index - _riseOffset) * _cellSize;
+    final zoom = game.camera.viewfinder.zoom;
+    return zoom > 0 ? (top * zoom).roundToDouble() / zoom : top;
+  }
 
   @override
   void render(Canvas canvas) {
@@ -252,10 +256,6 @@ class BoardComponent extends PositionComponent
         final left = col * _cellSize;
         final top = _topOf(index);
         if (block == null) {
-          canvas.drawRect(
-            Rect.fromLTWH(left, top, _cellSize, _cellSize),
-            _emptyCellPaint,
-          );
           continue;
         }
 
@@ -358,19 +358,8 @@ class BoardComponent extends PositionComponent
     spriteTileSize,
   );
 
-  /// Blocos vizinhos invadem uns aos outros por essa margem (em unidades do
-  /// mundo, não de pixel de tela) em vez de encostar exatos. A pilha sobe em
-  /// fração contínua de pixel, então uma borda encostada exata pode
-  /// arredondar pra um lado ou outro a cada frame e abrir uma frincha do
-  /// fundo entre os dois — some/aparece, lê como tremor. Com a invasão, o
-  /// vizinho desenha por cima da frincha em vez de deixar o fundo aparecer;
-  /// pequeno o bastante pra não dar pra perceber que os blocos não são
-  /// perfeitamente 128×128 encostados.
-  static const double _blockOverlap = 3;
-
-  /// Desenha um bloco a partir de `blocks.png`, preenchendo a célula
-  /// inteira (os tiles já nascem bordo-a-bordo, sem margem, mais a invasão
-  /// de [_blockOverlap]). [overlayColor] tinge por cima (usado pra piscar
+  /// Desenha um bloco preenchendo a célula inteira — o tile tem
+  /// [spriteTileSize] e a célula também, então sai 1:1, sem redimensionar. [overlayColor] tinge por cima (usado pra piscar
   /// branco na combinação, apagar a linha entrando, e desbotar o lado que
   /// perde na troca); [fadeOut] esmaece o sprite inteiro (usado no estouro,
   /// junto com o encolher de [scale]).
@@ -393,7 +382,7 @@ class BoardComponent extends PositionComponent
       top + (_cellSize - side) / 2,
       side,
       side,
-    ).inflate(_blockOverlap);
+    );
     // Só o alpha do paint importa pro drawImageRect (RGB é ignorado sem
     // colorFilter) — branco é só convenção de leitura.
     _spritePaint.color = Color.fromRGBO(255, 255, 255, 1 - fadeOut);
@@ -416,23 +405,13 @@ class BoardComponent extends PositionComponent
     if (rowId == null || !grid.hasRow(rowId)) {
       return;
     }
-    final rect = Rect.fromLTWH(
+    final cells = Rect.fromLTWH(
       swapController.cursorCol * _cellSize,
       _topOf(grid.indexOf(rowId)),
       _cellSize * 2,
       _cellSize,
     );
-    canvas.drawImageRect(
-      _selectorImage,
-      Rect.fromLTWH(
-        0,
-        0,
-        _selectorImage.width.toDouble(),
-        _selectorImage.height.toDouble(),
-      ),
-      rect,
-      _cursorPaint,
-    );
+    _selector.render(canvas, cells);
   }
 
   void _renderDangerLine(Canvas canvas) {
