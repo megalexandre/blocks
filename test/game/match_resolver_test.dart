@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:blocos/game/block.dart';
+import 'package:blocos/dressing/block.dart';
 import 'package:blocos/game/block_grid.dart';
 import 'package:blocos/game/match_resolver.dart';
 
@@ -40,50 +40,47 @@ void main() {
       expect(resolver.chainLevel, 1);
     });
 
-    test(
-      'bloco que cai de uma combinação fecha outra: chain sobe para 2',
-      () {
-        final grid = BlockGrid.empty(columns: 4, rowCount: 5);
-        // Piso inerte.
-        for (var col = 0; col < 4; col++) {
-          grid.place(4, col, BlockColor.purple);
+    test('bloco que cai de uma combinação fecha outra: chain sobe para 2', () {
+      final grid = BlockGrid.empty(columns: 4, rowCount: 5);
+      // Piso inerte.
+      for (var col = 0; col < 4; col++) {
+        grid.place(4, col, BlockColor.purple);
+      }
+      // Piso jogável: três vermelhos fecham combinação já no 1º frame.
+      // Um azul fica parado na quarta coluna, e mais dois azuis esperam
+      // apoiados em cima dos vermelhos — presos até o vermelho embaixo
+      // deles estourar e sumir, só então caem e completam o trio.
+      grid.place(3, 0, BlockColor.red);
+      grid.place(3, 1, BlockColor.red);
+      grid.place(3, 2, BlockColor.red);
+      grid.place(3, 3, BlockColor.blue);
+      grid.place(2, 1, BlockColor.blue);
+      grid.place(2, 2, BlockColor.blue);
+
+      final resolver = MatchResolver(grid: grid);
+
+      final onMatchCalls = <(int, int)>[];
+      resolver.onMatch = (comboSize, chainLevel) =>
+          onMatchCalls.add((comboSize, chainLevel));
+
+      var sawChainTwo = false;
+      for (var i = 0; i < 400 && resolver.chainLevel < 2; i++) {
+        grid.applyGravityStep();
+        resolver.update(0.02);
+        if (resolver.chainLevel == 2) {
+          sawChainTwo = true;
+          expect(resolver.comboSize, 3);
         }
-        // Piso jogável: três vermelhos fecham combinação já no 1º frame.
-        // Um azul fica parado na quarta coluna, e mais dois azuis esperam
-        // apoiados em cima dos vermelhos — presos até o vermelho embaixo
-        // deles estourar e sumir, só então caem e completam o trio.
-        grid.place(3, 0, BlockColor.red);
-        grid.place(3, 1, BlockColor.red);
-        grid.place(3, 2, BlockColor.red);
-        grid.place(3, 3, BlockColor.blue);
-        grid.place(2, 1, BlockColor.blue);
-        grid.place(2, 2, BlockColor.blue);
+      }
+      expect(sawChainTwo, isTrue, reason: 'chain nunca chegou a 2');
+      expect(onMatchCalls, [(3, 1), (3, 2)]);
 
-        final resolver = MatchResolver(grid: grid);
-
-        final onMatchCalls = <(int, int)>[];
-        resolver.onMatch = (comboSize, chainLevel) =>
-            onMatchCalls.add((comboSize, chainLevel));
-
-        var sawChainTwo = false;
-        for (var i = 0; i < 400 && resolver.chainLevel < 2; i++) {
-          grid.applyGravityStep();
-          resolver.update(0.02);
-          if (resolver.chainLevel == 2) {
-            sawChainTwo = true;
-            expect(resolver.comboSize, 3);
-          }
-        }
-        expect(sawChainTwo, isTrue, reason: 'chain nunca chegou a 2');
-        expect(onMatchCalls, [(3, 1), (3, 2)]);
-
-        _stepUntilIdle(grid, resolver);
-        expect(resolver.chainLevel, 0);
-        expect(resolver.comboSize, 0);
-        // Coluna 0 nunca recebeu reposição: fica vazia depois do vermelho sair.
-        expect(grid.atIndex(3, 0), isNull);
-      },
-    );
+      _stepUntilIdle(grid, resolver);
+      expect(resolver.chainLevel, 0);
+      expect(resolver.comboSize, 0);
+      // Coluna 0 nunca recebeu reposição: fica vazia depois do vermelho sair.
+      expect(grid.atIndex(3, 0), isNull);
+    });
   });
 }
 

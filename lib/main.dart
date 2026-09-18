@@ -2,8 +2,8 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'game/blocos_game.dart';
-import 'ui/palette.dart';
+import 'scene/game_scene.dart';
+import 'dressing/palette.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,7 +19,7 @@ class BlocosApp extends StatefulWidget {
 }
 
 class _BlocosAppState extends State<BlocosApp> {
-  final _game = BlocosGame();
+  final _game = GameScene();
 
   @override
   Widget build(BuildContext context) {

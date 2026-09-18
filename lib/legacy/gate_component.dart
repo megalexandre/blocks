@@ -1,7 +1,7 @@
 import 'package:flame/components.dart';
 
-import 'dressing/game_assets.dart';
-import 'layout.dart';
+import '../dressing/game_assets.dart';
+import '../config/layout.dart';
 
 /// Fundo da tela inteira: a arte do gate, fixa, atrás de todo o resto.
 /// Como o canvas do jogo é de resolução fixa ([GameLayout]), não precisa

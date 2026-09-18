@@ -4,13 +4,14 @@ import 'package:flame/camera.dart';
 import 'package:flame/components.dart' show Anchor;
 import 'package:flame/game.dart';
 
+import '../dressing/factory_elements.dart';
 import 'board_component.dart';
-import 'layout.dart';
-import 'score.dart';
-import 'stack_raiser.dart';
+import '../config/layout.dart';
+import '../game/score.dart';
+import '../game/stack_raiser.dart';
 
-class BlocosGame extends FlameGame {
-  BlocosGame() : super(camera: _buildCamera());
+class GameScene extends FlameGame {
+  GameScene() : super(camera: _buildCamera());
 
   final stackRaiser = StackRaiser();
   final score = Score();
@@ -31,7 +32,12 @@ class BlocosGame extends FlameGame {
 
   @override
   Future<void> onLoad() async {
-    board = BoardComponent(stackRaiser: stackRaiser, score: score);
+    final elements = await FactoryElements.load();
+    board = BoardComponent(
+      stackRaiser: stackRaiser,
+      score: score,
+      elements: elements,
+    );
     await world.add(board);
   }
 }

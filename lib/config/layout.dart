@@ -1,9 +1,9 @@
 import 'package:flame/game.dart';
 
 /// Canvas de referência do jogo: gate, board, wall e HUD são todos
-/// posicionados neste espaço fixo de pixels. A câmera do [BlocosGame] usa
+/// posicionados neste espaço fixo de pixels. A câmera do [GameScene] usa
 /// resolução fixa nesse tamanho (ver [CameraComponent.withFixedResolution]
-/// em `blocos_game.dart`), então esses pixels são os mesmos em qualquer
+/// em `game_scene.dart`), então esses pixels são os mesmos em qualquer
 /// aparelho — é isso que garante o gate alinhado.
 ///
 /// O tamanho bate com o nativo de `gate_full_screen.svg`/`.png`

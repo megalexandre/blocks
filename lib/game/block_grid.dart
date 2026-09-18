@@ -126,6 +126,26 @@ class BlockGrid {
     }
   }
 
+  /// Derrete o rastro visual de quem acabou de cair uma linha. A taxa casa
+  /// com o passo da queda de propósito: um bloco caindo várias linhas
+  /// seguidas ganha +1 de rastro a cada passo e perde esse mesmo tanto antes
+  /// do próximo, então o movimento sai contínuo em vez de picotado — sem
+  /// essa coincidência, o rastro ia se acumular ou sumir rápido demais.
+  ///
+  /// Fica aqui junto do [applyGravityStep], que é quem soma: o rastro tem um
+  /// dono só, em vez de ser somado num lugar e derretido em outro.
+  void easeFalls(double dt, {required double fallStepSeconds}) {
+    final decay = dt / fallStepSeconds;
+    for (var index = 0; index < rowCount; index++) {
+      for (var col = 0; col < columns; col++) {
+        final block = _rows[index][col];
+        if (block != null && block.fallOffset > 0) {
+          block.fallOffset = math.max(0, block.fallOffset - decay);
+        }
+      }
+    }
+  }
+
   void _allocateEmptyRows() {
     _rows
       ..clear()

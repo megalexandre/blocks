@@ -1,4 +1,4 @@
-import 'block.dart';
+import '../dressing/block.dart';
 import 'block_grid.dart';
 
 typedef Cell = ({int index, int col});
@@ -136,7 +136,13 @@ class MatchResolver {
   /// Caminha a partir de (index, col) no sentido [stepIndex], [stepCol] e
   /// guarda em [matched] toda sequência de [BlockGrid.matchLength] ou mais da
   /// mesma cor.
-  void _collectRun(Set<Cell> matched, int index, int col, int stepIndex, int stepCol) {
+  void _collectRun(
+    Set<Cell> matched,
+    int index,
+    int col,
+    int stepIndex,
+    int stepCol,
+  ) {
     final limite = stepCol != 0 ? grid.columns : grid.incomingIndex;
     var inicio = 0;
     BlockColor? corAtual;
@@ -149,10 +155,7 @@ class MatchResolver {
       if (cor != corAtual) {
         if (corAtual != null && passo - inicio >= BlockGrid.matchLength) {
           for (var k = inicio; k < passo; k++) {
-            matched.add((
-              index: index + stepIndex * k,
-              col: col + stepCol * k,
-            ));
+            matched.add((index: index + stepIndex * k, col: col + stepCol * k));
           }
         }
         corAtual = cor;

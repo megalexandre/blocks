@@ -2,9 +2,9 @@ import 'package:flame/components.dart';
 import 'package:flame/effects.dart';
 import 'package:flutter/animation.dart' show Curves;
 
-import 'board_component.dart';
-import 'dressing/game_assets.dart';
-import 'layout.dart';
+import '../scene/board_component.dart';
+import '../dressing/game_assets.dart';
+import '../config/layout.dart';
 
 /// Cobre o board para esconder os blocos antes da partida. Desliza para
 /// cima vindo de baixo da tela para cobrir ([hideBoard]), e desliza de

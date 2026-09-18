@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:blocos/game/block.dart';
+import 'package:blocos/dressing/block.dart';
 import 'package:blocos/game/block_grid.dart';
 
 void main() {

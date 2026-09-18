@@ -1,21 +1,26 @@
 import 'package:flame/components.dart';
 import 'package:flutter/painting.dart';
 
-import '../ui/block_look.dart';
-import '../ui/palette.dart';
-import 'block.dart';
-import 'board_component.dart';
-import 'layout.dart';
-import 'score.dart';
+import '../dressing/palette.dart';
+import '../scene/board_component.dart';
+import '../config/layout.dart';
+import '../game/score.dart';
 
 /// Placar e indicador de chain, numa única faixa centralizada na área que o
-/// [BoardComponent] reserva acima de si ([BoardComponent.topReserve]) — a
+/// [BoardComponent] reserva acima de si ([_topReserve]) — a
 /// opção "faixa única" escolhida no canvas de direção visual.
 class HudComponent extends PositionComponent {
   HudComponent({required this.board, required this.score});
 
   final BoardComponent board;
   final Score score;
+
+  /// Faixa reservada no topo para o HUD. Era uma constante do
+  /// BoardComponent; vive aqui porque só o HUD usa.
+  static const double _topReserve = 56;
+
+  /// Tom escuro do amarelo dos blocos, para o texto de chain.
+  static const Color _chainColor = Color(0xFFC7AD6A);
 
   static const double _cardHeight = 38;
   static const double _cardPaddingH = 18;
@@ -45,7 +50,7 @@ class HudComponent extends PositionComponent {
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
-    this.size = Vector2(GameLayout.width, BoardComponent.topReserve);
+    this.size = Vector2(GameLayout.width, _topReserve);
   }
 
   @override
@@ -61,7 +66,7 @@ class HudComponent extends PositionComponent {
         ..text = TextSpan(
           text: 'CHAIN ×$chainLevel',
           style: TextStyle(
-            color: BlockColor.yellow.look.dark,
+            color: _chainColor,
             fontSize: 15,
             fontWeight: FontWeight.w800,
           ),
