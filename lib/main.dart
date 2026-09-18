@@ -8,6 +8,11 @@ import 'dressing/palette.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
+  // Tela cheia de verdade: esconde barra de status e de navegação. Sticky
+  // porque o jogo é todo arrastar o dedo na tela — em `leanBack` qualquer
+  // toque traria as barras de volta. Aqui elas só reaparecem se o jogador
+  // deslizar da borda, e somem sozinhas.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   runApp(const BlocosApp());
 }
 
@@ -28,7 +33,10 @@ class _BlocosAppState extends State<BlocosApp> {
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         backgroundColor: Palette.background,
-        body: SafeArea(child: GameWidget(game: _game)),
+        // Sem SafeArea de propósito: a câmera de resolução fixa já faz
+        // letterbox para caber em qualquer proporção, então o fundo pode
+        // ocupar a tela inteira, entalhe incluído.
+        body: GameWidget(game: _game),
       ),
     );
   }

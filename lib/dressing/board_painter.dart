@@ -4,7 +4,7 @@ import 'dart:ui';
 import 'package:flame/components.dart';
 
 import 'palette.dart';
-import 'block.dart';
+import '../game/block.dart';
 import '../game/block_grid.dart';
 import '../game/match_resolver.dart';
 import '../game/swap_controller.dart';

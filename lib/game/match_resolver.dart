@@ -1,4 +1,4 @@
-import '../dressing/block.dart';
+import 'block.dart';
 import 'block_grid.dart';
 
 typedef Cell = ({int index, int col});

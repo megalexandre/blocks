@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import '../dressing/block.dart';
+import '../game/block.dart';
 
 class BlockLook {
   const BlockLook({required this.dark});
