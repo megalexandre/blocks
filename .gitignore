@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Core dumps — o binario Linux gera isso ao quebrar, e sao enormes
+# (o nosso tinha 1,18 GB e travou o push no limite de 100 MB do GitHub).
+core
+core.*
+vgcore.*
+*.core
