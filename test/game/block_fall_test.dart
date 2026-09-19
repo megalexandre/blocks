@@ -27,7 +27,6 @@ void main() {
       grid.remove(grid.floorIndex, col!);
       final fallingBlock = grid.atIndex(grid.floorIndex - 1, col)!;
 
-      const passo = 0.035; // BoardComponent.fallStepSeconds
       grid.applyGravityStep();
       expect(
         fallingBlock.fallOffset,
@@ -37,7 +36,7 @@ void main() {
 
       var viuNoMeio = false;
       for (var i = 0; i < 200; i++) {
-        grid.easeFalls(0.008, fallStepSeconds: passo);
+        grid.easeFalls(0.008);
         if (fallingBlock.fallOffset > 0.01 && fallingBlock.fallOffset < 0.99) {
           viuNoMeio = true;
         }

@@ -31,9 +31,6 @@ class BoardComponent extends PositionComponent
   /// Linhas de folga entre o topo do tabuleiro e a linha de perigo.
   static const int dangerRows = 2;
 
-  /// Um bloco sem apoio desce uma linha a cada passo.
-  static const double fallStepSeconds = 0.035;
-
   /// Elementos já carregados, entregues pela cena.
   final FactoryElements elements;
 
@@ -96,11 +93,11 @@ class BoardComponent extends PositionComponent
     }
 
     _fallTimer += dt;
-    while (_fallTimer >= fallStepSeconds) {
-      _fallTimer -= fallStepSeconds;
+    while (_fallTimer >= BlockGrid.gravityStepSeconds) {
+      _fallTimer -= BlockGrid.gravityStepSeconds;
       grid.applyGravityStep();
     }
-    grid.easeFalls(dt, fallStepSeconds: fallStepSeconds);
+    grid.easeFalls(dt);
 
     matchResolver.update(dt);
     stackRaiser.frozen = matchResolver.isResolving || grid.hasFallingBlocks;
