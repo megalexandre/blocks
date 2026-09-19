@@ -7,14 +7,19 @@ import 'package:flame/game.dart';
 import '../dressing/factory_elements.dart';
 import 'board_component.dart';
 import '../config/layout.dart';
-import '../game/score.dart';
-import '../game/stack_raiser.dart';
+import '../game/playfield.dart';
 
 class GameScene extends FlameGame {
-  GameScene() : super(camera: _buildCamera());
+  /// Recebe o jogo pronto em vez de criá-lo: é o que deixa uma partida
+  /// começar de um tabuleiro montado, em vez de sempre da pilha sorteada.
+  /// Sem argumento, é a partida normal.
+  GameScene({Playfield? playfield})
+    : playfield = playfield ?? Playfield.standard(),
+      super(camera: _buildCamera());
 
-  final stackRaiser = StackRaiser();
-  final score = Score();
+  /// O jogo. A cena o entrega ao tabuleiro; ninguém mais precisa saber que a
+  /// pilha, o placar e a gravidade existem separados.
+  final Playfield playfield;
 
   late final BoardComponent board;
 
@@ -33,11 +38,7 @@ class GameScene extends FlameGame {
   @override
   Future<void> onLoad() async {
     final elements = await FactoryElements.load();
-    board = BoardComponent(
-      stackRaiser: stackRaiser,
-      score: score,
-      elements: elements,
-    );
+    board = BoardComponent(playfield: playfield, elements: elements);
     await world.add(board);
   }
 }

@@ -1,61 +1,32 @@
-import 'block_grid.dart';
-
-/// A troca que acabou de acontecer, enquanto ainda está sendo animada.
-///
-/// A grade já está no estado final: as colunas aqui são onde cada bloco
-/// **está agora**. Quem desenha interpola de volta até de onde ele veio.
-class SwapAnimation {
-  SwapAnimation({
-    required this.rowId,
-    required this.grabbedCol,
-    required this.displacedCol,
-  });
-
-  static const double duration = 0.15;
-
-  /// Linha da troca. É um id estável, então a animação sobrevive à subida.
-  final int rowId;
-
-  /// Coluna onde o bloco escolhido está agora — ele vem para a frente.
-  final int grabbedCol;
-
-  /// Coluna onde o bloco empurrado está agora — ele vai para trás.
-  final int displacedCol;
-
-  double _elapsed = 0;
-
-  /// 0 quando os blocos ainda estão nas posições antigas, 1 no fim.
-  double get progress => (_elapsed / duration).clamp(0.0, 1.0);
-
-  bool get isDone => _elapsed >= duration;
-
-  void advance(double dt) => _elapsed += dt;
-}
+import '../model/block_grid.dart';
+import '../model/board_row.dart';
+import '../model/column.dart';
+import 'swap_animation.dart';
 
 /// Estado e regras da troca de blocos por arraste.
 ///
-/// Não sabe nada de pixels: o tabuleiro converte o toque em (coluna, rowId) e
+/// Não sabe nada de pixels: o tabuleiro converte o toque em (coluna, linha) e
 /// chama estes métodos, e traduz o [progress] da animação em posição na tela.
-class SwapController {
-  SwapController({required this.grid});
+class SwapSystem {
+  SwapSystem({required this.grid});
 
   final BlockGrid grid;
 
   /// Coluna esquerda do cursor; ele cobre duas colunas. Linha nula enquanto o
   /// jogador ainda não tocou no tabuleiro.
-  int get cursorCol => _cursorCol;
-  int? get cursorRowId => _cursorRowId;
+  Column get cursorColumn => _cursorColumn;
+  BoardRow? get cursorRow => _cursorRow;
 
-  int _cursorCol = 0;
-  int? _cursorRowId;
+  Column _cursorColumn = const Column(0);
+  BoardRow? _cursorRow;
 
   /// Linha e coluna do bloco pego, enquanto o gesto ainda pode trocar.
-  int? _dragRowId;
-  int? _dragCol;
+  BoardRow? _dragRow;
+  Column? _dragColumn;
 
   /// Verdadeiro enquanto o gesto atual ainda pode gerar uma troca. Vira falso
   /// assim que a troca acontece, mesmo com o dedo ainda na tela.
-  bool get isArmed => _dragRowId != null;
+  bool get isArmed => _dragRow != null;
 
   /// A troca em andamento, ou nulo quando não há nada animando.
   SwapAnimation? get animation => _animation;
@@ -73,53 +44,53 @@ class SwapController {
     }
   }
 
-  void beginDrag(int col, int rowId) {
-    _dragRowId = rowId;
-    _dragCol = col;
-    _cursorRowId = rowId;
-    _cursorCol = _clampCursor(col);
+  void beginDrag(Column col, BoardRow row) {
+    _dragRow = row;
+    _dragColumn = col;
+    _cursorRow = row;
+    _cursorColumn = _clampCursor(col);
   }
 
-  /// Troca o bloco pego com o vizinho no sentido de [targetCol] — uma casa, e
-  /// só uma: um gesto vale uma troca. Ir mais longe com o dedo não acumula
-  /// trocas; para trocar de novo é preciso soltar e tocar outra vez.
-  void dragTo(int targetCol) {
-    final rowId = _dragRowId;
-    final from = _dragCol;
-    if (rowId == null || from == null) {
+  /// Troca o bloco pego com o vizinho no sentido de [targetColumn] — uma
+  /// casa, e só uma: um gesto vale uma troca. Ir mais longe com o dedo não
+  /// acumula trocas; para trocar de novo é preciso soltar e tocar outra vez.
+  void dragTo(Column targetColumn) {
+    final row = _dragRow;
+    final from = _dragColumn;
+    if (row == null || from == null) {
       return;
     }
     // A linha pode ter saído pelo topo no meio do gesto.
-    if (!grid.hasRow(rowId)) {
+    if (!grid.contains(row)) {
       endDrag();
       return;
     }
-    final target = targetCol.clamp(0, grid.columns - 1);
+    final target = grid.geometry.clampColumn(targetColumn.value);
     if (target == from) {
       return;
     }
-    final next = target > from ? from + 1 : from - 1;
-    // Bloco piscando ou estourando não se troca: ele já está em resolução.
-    if (!_swappable(rowId, from) || !_swappable(rowId, next)) {
+    final next = from.towards(target);
+    // Bloco em resolução ou ainda no ar não se troca.
+    if (!grid.canSwap(row, from, next)) {
       return;
     }
-    grid.swap(rowId, from, next);
+    grid.swap(row, from, next);
     _animation = SwapAnimation(
-      rowId: rowId,
-      grabbedCol: next,
-      displacedCol: from,
+      row: row,
+      grabbedColumn: next,
+      displacedColumn: from,
     );
-    _cursorCol = _clampCursor(from < next ? from : next);
+    _cursorColumn = _clampCursor(from < next ? from : next);
     endDrag();
   }
 
   void endDrag() {
-    _dragRowId = null;
-    _dragCol = null;
+    _dragRow = null;
+    _dragColumn = null;
   }
 
-  /// Célula vazia pode receber bloco; bloco só sai se estiver parado.
-  bool _swappable(int rowId, int col) => grid.at(rowId, col)?.isIdle ?? true;
-
-  int _clampCursor(int col) => col.clamp(0, grid.columns - 2);
+  /// O cursor cobre duas colunas, então a esquerda dele nunca pode ser a
+  /// última do tabuleiro.
+  Column _clampCursor(Column col) =>
+      Column(col.value.clamp(0, grid.geometry.columnCount - 2));
 }

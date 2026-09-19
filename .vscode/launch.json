@@ -10,6 +10,16 @@
       "env": {
         "LIBGL_ALWAYS_SOFTWARE": "1"
       }
+    },
+    {
+      "name": "Run linux (dev)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_dev.dart",
+      "deviceId": "linux",
+      "env": {
+        "LIBGL_ALWAYS_SOFTWARE": "1"
+      }
     }
   ]
 }

@@ -1,14 +1,13 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flame/components.dart';
 
 import 'palette.dart';
-import '../game/block.dart';
-import '../game/block_grid.dart';
-import '../game/match_resolver.dart';
-import '../game/swap_controller.dart';
+import '../game/model/block.dart';
+import '../game/model/column.dart';
+import '../game/playfield.dart';
 import 'block_sprites.dart';
+import 'board_viewport.dart';
 import 'factory_elements.dart';
 import 'selector.dart';
 
@@ -18,15 +17,14 @@ import 'selector.dart';
 /// quadro entrega aqui a medida da célula e onde a pilha está.
 class BoardPainter {
   BoardPainter({
-    required this.grid,
-    required this.swapController,
+    required this.playfield,
     required this.dangerRows,
     required FactoryElements elements,
   }) : _blocks = elements.blocks,
        _selector = elements.selector;
 
-  final BlockGrid grid;
-  final SwapController swapController;
+  /// Lido, nunca escrito: o pintor pergunta ao jogo onde está cada coisa.
+  final Playfield playfield;
 
   /// Linhas de folga entre o topo do tabuleiro e a linha de perigo.
   final int dangerRows;
@@ -53,78 +51,53 @@ class BoardPainter {
     ..strokeWidth = 2
     ..strokeCap = StrokeCap.round;
 
-  // Medidas do quadro atual, entregues pelo board em cada render.
-  late Vector2 _size;
-  late double _cellSize;
-  late double _riseOffset;
-  late double _zoom;
-
-  void render(
-    Canvas canvas, {
-    required Vector2 size,
-    required double cellSize,
-    required double riseOffset,
-    required double zoom,
-  }) {
-    _size = size;
-    _cellSize = cellSize;
-    _riseOffset = riseOffset;
-    _zoom = zoom;
-
+  /// Desenha o quadro. Todas as medidas vêm em [view] — o pintor não guarda
+  /// nenhuma delas entre um quadro e outro.
+  void render(Canvas canvas, BoardViewport view) {
     final panel = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.x, size.y),
-      Radius.circular(cellSize * 0.2),
+      Rect.fromLTWH(0, 0, view.size.x, view.size.y),
+      Radius.circular(view.cellSize * 0.2),
     );
     canvas.drawRRect(panel, _panelPaint);
 
     canvas.save();
     canvas.clipRRect(panel);
-    _renderBlocks(canvas);
-    _renderSwapAnimation(canvas);
-    _renderCursor(canvas);
+    _renderBlocks(canvas, view);
+    _renderSwapAnimation(canvas, view);
+    _renderCursor(canvas, view);
     canvas.restore();
 
     canvas.drawRRect(panel, _panelBorderPaint);
-    _renderDangerLine(canvas);
+    _renderDangerLine(canvas, view);
   }
 
-  /// Topo da linha no índice visual [index], arredondado para pixel inteiro.
-  ///
-  /// A pilha sobe ~0,1 pixel de tela por frame. Em posição fracionária os
-  /// traços finos não cabem num pixel exato: a amostragem ora concentra o
-  /// traço em 1 pixel, ora espalha em 2, e a espessura pulsa. Arredondando,
-  /// a cena anda junta de 1 em 1 pixel e cada quadro sai idêntico ao
-  /// anterior — passo pequeno e lento demais para aparecer.
-  double _topOf(int index) {
-    final top = (index - _riseOffset) * _cellSize;
-    return _zoom > 0 ? (top * _zoom).roundToDouble() / _zoom : top;
-  }
+  void _renderBlocks(Canvas canvas, BoardViewport view) {
+    final animation = playfield.swapAnimation;
+    final animatedRow = animation == null
+        ? null
+        : playfield.grid.positionOf(animation.row);
 
-  void _renderBlocks(Canvas canvas) {
-    final animation = swapController.animation;
-    final animatedIndex = animation != null && grid.hasRow(animation.rowId)
-        ? grid.indexOf(animation.rowId)
-        : null;
-
-    for (var index = 0; index < grid.rowCount; index++) {
-      for (var col = 0; col < grid.columns; col++) {
+    for (final row in playfield.geometry.allRows) {
+      for (final col in playfield.geometry.columns) {
         // Os dois blocos da troca são desenhados depois, por cima de tudo.
-        if (index == animatedIndex &&
-            (col == animation!.grabbedCol || col == animation.displacedCol)) {
+        if (row == animatedRow &&
+            (col == animation!.grabbedColumn ||
+                col == animation.displacedColumn)) {
           continue;
         }
-        final block = grid.atIndex(index, col);
+        final block = playfield.grid.blockAt(row, col);
         if (block == null) {
           continue;
         }
-        final left = col * _cellSize;
-        final top = _topOf(index) - block.fallOffset * _cellSize;
-        final incoming = index == grid.incomingIndex;
+        final left = view.leftOf(col);
+        final top = view.topOf(row) - block.fallOffset * view.cellSize;
+        final incoming = row == playfield.geometry.incomingRow;
 
         switch (block.state) {
           case BlockState.idle:
             _drawBlock(
               canvas,
+              view,
               block.color,
               left,
               top,
@@ -132,29 +105,31 @@ class BoardPainter {
               overlayAlpha: incoming ? incomingShade : 0,
             );
           case BlockState.matched:
-            final piscada =
+            final flash =
                 (math.sin(block.stateTime * flashHz * 2 * math.pi) + 1) / 2;
             _drawBlock(
               canvas,
+              view,
               block.color,
               left,
               top,
               overlayColor: Palette.flash,
-              overlayAlpha: piscada,
+              overlayAlpha: flash,
             );
           case BlockState.popping:
-            final saindo = block.stateTime < block.popDelay
+            final popped = block.stateTime < block.popDelay
                 ? 0.0
                 : ((block.stateTime - block.popDelay) /
-                          MatchResolver.popDuration)
+                          playfield.timings.pop)
                       .clamp(0.0, 1.0);
             _drawBlock(
               canvas,
+              view,
               block.color,
               left,
               top,
-              scale: 1 - saindo,
-              fadeOut: saindo,
+              scale: 1 - popped,
+              fadeOut: popped,
             );
         }
       }
@@ -168,26 +143,37 @@ class BoardPainter {
   /// No cruzamento os dois ficam no centro do vão e as bordas aparecem por um
   /// instante. Isso é geométrico: quem troca de lado tem que se cruzar. O que
   /// disfarça é o bloco da frente estar aumentado, cobrindo mais.
-  void _renderSwapAnimation(Canvas canvas) {
-    final animation = swapController.animation;
-    if (animation == null || !grid.hasRow(animation.rowId)) {
+  void _renderSwapAnimation(Canvas canvas, BoardViewport view) {
+    final animation = playfield.swapAnimation;
+    if (animation == null) {
       return;
     }
-    final top = _topOf(grid.indexOf(animation.rowId));
+    // A linha pode ter saído pelo topo no meio da animação.
+    final row = playfield.grid.positionOf(animation.row);
+    if (row == null) {
+      return;
+    }
+    final top = view.topOf(row);
 
     // Órbita: o x é a projeção do giro e o depth é o quanto saiu do plano.
     final sweep = (1 - math.cos(math.pi * animation.progress)) / 2;
     final depth = math.sin(math.pi * animation.progress);
 
     // O do fundo primeiro, para o da frente passar por cima dele.
-    final displaced = grid.at(animation.rowId, animation.displacedCol);
+    final displaced = animation.row[animation.displacedColumn];
     if (displaced != null) {
       // Recuo contido de propósito: encolhendo e desbotando muito, o bloco
       // do fundo desaparece atrás do da frente e o cruzamento vira buraco.
       _drawBlock(
         canvas,
+        view,
         displaced.color,
-        _orbit(animation.grabbedCol, animation.displacedCol, sweep),
+        _orbit(
+          view,
+          animation.grabbedColumn,
+          animation.displacedColumn,
+          sweep,
+        ),
         top,
         scale: 1 - 0.14 * depth,
         overlayColor: Palette.playfield,
@@ -195,27 +181,34 @@ class BoardPainter {
       );
     }
 
-    final grabbed = grid.at(animation.rowId, animation.grabbedCol);
+    final grabbed = animation.row[animation.grabbedColumn];
     if (grabbed != null) {
       _drawBlock(
         canvas,
+        view,
         grabbed.color,
-        _orbit(animation.displacedCol, animation.grabbedCol, sweep),
+        _orbit(
+          view,
+          animation.displacedColumn,
+          animation.grabbedColumn,
+          sweep,
+        ),
         top,
         scale: 1 + 0.3 * depth,
       );
     }
   }
 
-  double _orbit(int from, int to, double sweep) =>
-      (from + (to - from) * sweep) * _cellSize;
+  double _orbit(BoardViewport view, Column from, Column to, double sweep) =>
+      view.leftOf(from) + (view.leftOf(to) - view.leftOf(from)) * sweep;
 
   /// Desenha um bloco preenchendo a célula. [overlayColor] tinge por cima
-  /// (piscada da combinação, linha entrando apagada, lado que perde na
+  /// (flash da combinação, linha entrando apagada, lado que perde na
   /// troca); [fadeOut] esmaece o sprite inteiro, usado no estouro junto com
   /// o encolher de [scale].
   void _drawBlock(
     Canvas canvas,
+    BoardViewport view,
     BlockColor color,
     double left,
     double top, {
@@ -227,10 +220,10 @@ class BoardPainter {
     if (scale <= 0) {
       return;
     }
-    final side = _cellSize * scale;
+    final side = view.cellSize * scale;
     final rect = Rect.fromLTWH(
-      left + (_cellSize - side) / 2,
-      top + (_cellSize - side) / 2,
+      left + (view.cellSize - side) / 2,
+      top + (view.cellSize - side) / 2,
       side,
       side,
     );
@@ -243,29 +236,30 @@ class BoardPainter {
     }
   }
 
-  void _renderCursor(Canvas canvas) {
-    final rowId = swapController.cursorRowId;
-    if (rowId == null || !grid.hasRow(rowId)) {
+  void _renderCursor(Canvas canvas, BoardViewport view) {
+    final cursorRow = playfield.cursorRow;
+    final row = cursorRow == null ? null : playfield.grid.positionOf(cursorRow);
+    if (row == null) {
       return;
     }
     _selector.render(
       canvas,
       Rect.fromLTWH(
-        swapController.cursorCol * _cellSize,
-        _topOf(grid.indexOf(rowId)),
-        _cellSize * 2,
-        _cellSize,
+        view.leftOf(playfield.cursorColumn),
+        view.topOf(row),
+        view.cellSize * 2,
+        view.cellSize,
       ),
     );
   }
 
-  void _renderDangerLine(Canvas canvas) {
+  void _renderDangerLine(Canvas canvas, BoardViewport view) {
     const dash = 10.0;
     const gap = 6.0;
-    final y = dangerRows * _cellSize;
+    final y = view.rowsToPixels(dangerRows);
     var x = 0.0;
-    while (x < _size.x) {
-      final end = math.min(x + dash, _size.x);
+    while (x < view.size.x) {
+      final end = math.min(x + dash, view.size.x);
       canvas.drawLine(Offset(x, y), Offset(end, y), _dangerPaint);
       x = end + gap;
     }

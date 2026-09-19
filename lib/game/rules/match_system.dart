@@ -1,24 +1,27 @@
-import 'block.dart';
-import 'block_grid.dart';
-
-typedef Cell = ({int index, int col});
+import '../model/block.dart';
+import '../model/block_grid.dart';
+import '../model/cell.dart';
+import '../color_runs.dart';
+import '../game_event.dart';
+import '../match_timings.dart';
 
 /// Encontra combinações de 3+ e conduz cada bloco por piscar → estourar →
 /// sair da grade. Não sabe nada de pixels: o tabuleiro lê o estado do bloco
 /// para decidir como desenhar.
-class MatchResolver {
-  MatchResolver({required this.grid});
+class MatchSystem {
+  MatchSystem({required this.grid, this.timings = MatchTimings.standard});
 
   final BlockGrid grid;
 
-  /// Quanto tempo o grupo pisca antes de começar a estourar.
-  static const double flashDuration = 0.5;
+  /// Piscar, estourar e o atraso da cascata. Value object porque quem
+  /// desenha precisa dos mesmos números, e importava esta classe inteira só
+  /// para ler uma constante dela.
+  final MatchTimings timings;
 
-  /// Quanto dura o estouro de um bloco.
-  static const double popDuration = 0.12;
-
-  /// Atraso entre um bloco e o seguinte, para o grupo sair em cascata.
-  static const double popStagger = 0.05;
+  /// Só bloco parado e apoiado combina — o leitor de [ColorRuns] que carrega
+  /// essa regra. Contar a sequência em si não é assunto daqui: é o mesmo
+  /// conceito que o veto do carteador usa, e ele tem um dono só.
+  late final ColorRuns _runs = ColorRuns.matchable(grid);
 
   /// Verdadeiro enquanto existe bloco piscando ou estourando.
   bool get isResolving => _resolving;
@@ -45,24 +48,43 @@ class MatchResolver {
   /// estado do frame atual perderia a chain nesse instante exato.
   bool _chainActive = false;
 
-  /// Avisado a cada combinação nova, com o tamanho do grupo e o nível da
-  /// chain. Quem soma pontos ouve aqui em vez de espiar [comboSize] a cada
-  /// frame — os dois campos ficam parados por vários frames enquanto a
-  /// combinação pisca e estoura, e um placar que somasse por frame contaria a
-  /// mesma combinação várias vezes.
-  void Function(int comboSize, int chainLevel)? onMatch;
-
-  void update(double dt) {
+  /// Um quadro de combinação. [isSettling] responde "a pilha ainda está se
+  /// acomodando", e vem de fora porque quem sabe disso é a gravidade.
+  ///
+  /// Injetado na chamada, e não guardado como colaborador: este sistema
+  /// precisa da gravidade só para essa pergunta, e quem conduz o quadro já
+  /// tem os dois na mão. Guardar um dentro do outro amarraria dois sistemas
+  /// para responder um bit.
+  ///
+  /// **Função, e não `bool`.** A resposta só vale depois de [_advance] tirar
+  /// da grade os blocos que terminaram de estourar: é exatamente no quadro em
+  /// que o último bloco de uma combinação some que o bloco de cima fica sem
+  /// apoio. Recebendo um `bool` calculado antes disso, a pilha parecia
+  /// parada, nada estava resolvendo, e a chain era zerada justo no instante
+  /// que [_chainActive] existe para atravessar — a combinação seguinte
+  /// entrava como chain 1 em vez de 2.
+  /// Quem soma pontos ouve o evento em vez de espiar [comboSize] a cada
+  /// quadro: os dois campos ficam parados por vários quadros enquanto a
+  /// combinação pisca e estoura, e um placar que somasse por quadro contaria
+  /// a mesma combinação dezenas de vezes.
+  void update(
+    double dt, {
+    required bool Function() isSettling,
+    required EmitEvent emit,
+  }) {
     _advance(dt);
     final matchedNow = _detect();
     if (matchedNow > 0) {
       _comboSize = matchedNow;
       _chainLevel = _chainActive ? _chainLevel + 1 : 1;
       _chainActive = true;
-      onMatch?.call(_comboSize, _chainLevel);
+      emit(MatchCleared(comboSize: _comboSize, chainLevel: _chainLevel));
     }
     _resolving = _anyResolving();
-    if (!_resolving && !grid.hasFallingBlocks) {
+    if (!_resolving && !isSettling()) {
+      if (_chainActive) {
+        emit(ChainEnded(length: _chainLevel));
+      }
       _chainActive = false;
       _comboSize = 0;
       _chainLevel = 0;
@@ -70,9 +92,9 @@ class MatchResolver {
   }
 
   bool _anyResolving() {
-    for (var index = 0; index < grid.incomingIndex; index++) {
-      for (var col = 0; col < grid.columns; col++) {
-        final block = grid.atIndex(index, col);
+    for (final row in grid.geometry.playableRows) {
+      for (final col in grid.geometry.columns) {
+        final block = grid.blockAt(row, col);
         if (block != null && !block.isIdle) {
           return true;
         }
@@ -82,21 +104,21 @@ class MatchResolver {
   }
 
   void _advance(double dt) {
-    for (var index = 0; index < grid.incomingIndex; index++) {
-      for (var col = 0; col < grid.columns; col++) {
-        final block = grid.atIndex(index, col);
+    for (final row in grid.geometry.playableRows) {
+      for (final col in grid.geometry.columns) {
+        final block = grid.blockAt(row, col);
         if (block == null || block.isIdle) {
           continue;
         }
         block.stateTime += dt;
         switch (block.state) {
           case BlockState.matched:
-            if (block.stateTime >= flashDuration) {
+            if (block.stateTime >= timings.flash) {
               block.enter(BlockState.popping);
             }
           case BlockState.popping:
-            if (block.stateTime >= block.popDelay + popDuration) {
-              grid.remove(index, col);
+            if (block.stateTime >= block.clearAt) {
+              grid.clear(row, col);
             }
           case BlockState.idle:
             break;
@@ -108,69 +130,21 @@ class MatchResolver {
   /// Marca em [BlockState.matched] toda combinação nova encontrada agora, e
   /// devolve quantos blocos entraram nela (0 se não achou nenhuma).
   int _detect() {
-    final matched = <Cell>{};
-    for (var index = 0; index < grid.incomingIndex; index++) {
-      _collectRun(matched, index, 0, 0, 1);
-    }
-    for (var col = 0; col < grid.columns; col++) {
-      _collectRun(matched, 0, col, 1, 0);
-    }
+    final matched = _runs.matchedCells();
     if (matched.isEmpty) {
       return 0;
     }
 
-    // Cascata da esquerda para a direita, de baixo para cima.
-    final ordem = matched.toList()
-      ..sort((a, b) {
-        final porColuna = a.col.compareTo(b.col);
-        return porColuna != 0 ? porColuna : b.index.compareTo(a.index);
-      });
-    for (var i = 0; i < ordem.length; i++) {
-      final block = grid.atIndex(ordem[i].index, ordem[i].col)!;
-      block.enter(BlockState.matched);
-      block.popDelay = i * popStagger;
+    final order = matched.toList()..sort(cascadeOrder);
+    // O grupo inteiro sai quando o último terminar de encolher: a cascata é
+    // só visual, e a pilha de cima espera o buraco ficar pronto por completo.
+    final clearAt = (order.length - 1) * timings.stagger + timings.pop;
+    for (var i = 0; i < order.length; i++) {
+      grid.blockAt(order[i].row, order[i].col)!
+        ..enter(BlockState.matched)
+        ..popDelay = i * timings.stagger
+        ..clearAt = clearAt;
     }
-    return ordem.length;
-  }
-
-  /// Caminha a partir de (index, col) no sentido [stepIndex], [stepCol] e
-  /// guarda em [matched] toda sequência de [BlockGrid.matchLength] ou mais da
-  /// mesma cor.
-  void _collectRun(
-    Set<Cell> matched,
-    int index,
-    int col,
-    int stepIndex,
-    int stepCol,
-  ) {
-    final limite = stepCol != 0 ? grid.columns : grid.incomingIndex;
-    var inicio = 0;
-    BlockColor? corAtual;
-
-    for (var passo = 0; passo <= limite; passo++) {
-      final i = index + stepIndex * passo;
-      final c = col + stepCol * passo;
-      final cor = passo < limite ? _matchableColor(i, c) : null;
-
-      if (cor != corAtual) {
-        if (corAtual != null && passo - inicio >= BlockGrid.matchLength) {
-          for (var k = inicio; k < passo; k++) {
-            matched.add((index: index + stepIndex * k, col: col + stepCol * k));
-          }
-        }
-        corAtual = cor;
-        inicio = passo;
-      }
-    }
-  }
-
-  /// Cor do bloco, se ele pode formar combinação agora. Bloco sem apoio está
-  /// caindo e não conta — no original combinação só fecha com bloco assentado.
-  BlockColor? _matchableColor(int index, int col) {
-    final block = grid.atIndex(index, col);
-    if (block == null || !block.isIdle) {
-      return null;
-    }
-    return grid.atIndex(index + 1, col) == null ? null : block.color;
+    return order.length;
   }
 }

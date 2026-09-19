@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flame/components.dart';
 import 'package:flame/flame.dart';
 
-import '../game/block.dart';
+import '../game/model/block.dart';
 import 'game_assets.dart';
 
 /// Fatia `blocks.png` e desenha o bloco de cada cor. Quem usa não precisa

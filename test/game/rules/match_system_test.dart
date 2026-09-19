@@ -1,102 +1,162 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:blocos/game/block.dart';
-import 'package:blocos/game/block_grid.dart';
-import 'package:blocos/game/match_resolver.dart';
+import 'package:blocos/game/model/block.dart';
+import 'package:blocos/game/model/block_grid.dart';
+import 'package:blocos/game/model/board_geometry.dart';
+import 'package:blocos/game/model/column.dart';
+import 'package:blocos/game/game_event.dart';
+import 'package:blocos/game/match_timings.dart';
+import 'package:blocos/game/rules/gravity_system.dart';
+import 'package:blocos/game/rules/match_system.dart';
+import 'package:blocos/game/model/row_index.dart';
+
+RowIndex row(int value) => RowIndex(value);
+Column col(int value) => Column(value);
+
+BlockGrid emptyGrid({required int columns, required int rows}) =>
+    BlockGrid(BoardGeometry(columnCount: columns, visibleRowCount: rows - 1));
 
 void main() {
-  group('MatchResolver combo e chain', () {
+  group('MatchSystem: combo e chain', () {
     test('combinação simples: combo 3, chain 1, e volta a 0 ao assentar', () {
-      final grid = BlockGrid.empty(columns: 3, rowCount: 5);
+      final grid = emptyGrid(columns: 3, rows: 5);
       // Linha de entrada: piso inerte que sustenta a jogável.
-      for (var col = 0; col < 3; col++) {
-        grid.place(4, col, BlockColor.purple);
-        grid.place(3, col, BlockColor.red);
+      for (var c = 0; c < 3; c++) {
+        grid.put(row(4), col(c), Block(BlockColor.purple));
+        grid.put(row(3), col(c), Block(BlockColor.red));
       }
-      final resolver = MatchResolver(grid: grid);
+      final system = MatchSystem(grid: grid);
 
-      resolver.update(0);
-      expect(resolver.comboSize, 3);
-      expect(resolver.chainLevel, 1);
+      system.update(0, isSettling: () => false, emit: _ignore);
+      expect(system.comboSize, 3);
+      expect(system.chainLevel, 1);
 
-      _stepUntilIdle(grid, resolver);
-      expect(resolver.comboSize, 0);
-      expect(resolver.chainLevel, 0);
-      for (var col = 0; col < 3; col++) {
-        expect(grid.atIndex(3, col), isNull);
+      _stepUntilIdle(grid, system);
+      expect(system.comboSize, 0);
+      expect(system.chainLevel, 0);
+      for (var c = 0; c < 3; c++) {
+        expect(grid.blockAt(row(3), col(c)), isNull);
       }
     });
 
     test('combinação de 4 em linha conta como combo 4', () {
-      final grid = BlockGrid.empty(columns: 4, rowCount: 5);
-      for (var col = 0; col < 4; col++) {
-        grid.place(4, col, BlockColor.purple);
-        grid.place(3, col, BlockColor.red);
+      final grid = emptyGrid(columns: 4, rows: 5);
+      for (var c = 0; c < 4; c++) {
+        grid.put(row(4), col(c), Block(BlockColor.purple));
+        grid.put(row(3), col(c), Block(BlockColor.red));
       }
-      final resolver = MatchResolver(grid: grid);
+      final system = MatchSystem(grid: grid);
 
-      resolver.update(0);
-      expect(resolver.comboSize, 4);
-      expect(resolver.chainLevel, 1);
+      system.update(0, isSettling: () => false, emit: _ignore);
+      expect(system.comboSize, 4);
+      expect(system.chainLevel, 1);
     });
 
     test('bloco que cai de uma combinação fecha outra: chain sobe para 2', () {
-      final grid = BlockGrid.empty(columns: 4, rowCount: 5);
+      final grid = emptyGrid(columns: 4, rows: 5);
       // Piso inerte.
-      for (var col = 0; col < 4; col++) {
-        grid.place(4, col, BlockColor.purple);
+      for (var c = 0; c < 4; c++) {
+        grid.put(row(4), col(c), Block(BlockColor.purple));
       }
       // Piso jogável: três vermelhos fecham combinação já no 1º frame.
       // Um azul fica parado na quarta coluna, e mais dois azuis esperam
       // apoiados em cima dos vermelhos — presos até o vermelho embaixo
       // deles estourar e sumir, só então caem e completam o trio.
-      grid.place(3, 0, BlockColor.red);
-      grid.place(3, 1, BlockColor.red);
-      grid.place(3, 2, BlockColor.red);
-      grid.place(3, 3, BlockColor.blue);
-      grid.place(2, 1, BlockColor.blue);
-      grid.place(2, 2, BlockColor.blue);
+      grid.put(row(3), col(0), Block(BlockColor.red));
+      grid.put(row(3), col(1), Block(BlockColor.red));
+      grid.put(row(3), col(2), Block(BlockColor.red));
+      grid.put(row(3), col(3), Block(BlockColor.blue));
+      grid.put(row(2), col(1), Block(BlockColor.blue));
+      grid.put(row(2), col(2), Block(BlockColor.blue));
 
-      final resolver = MatchResolver(grid: grid);
+      final system = MatchSystem(grid: grid);
 
-      final onMatchCalls = <(int, int)>[];
-      resolver.onMatch = (comboSize, chainLevel) =>
-          onMatchCalls.add((comboSize, chainLevel));
+      final cleared = <MatchCleared>[];
+      void collect(GameEvent event) {
+        if (event is MatchCleared) {
+          cleared.add(event);
+        }
+      }
 
+      final gravity = GravitySystem(grid: grid);
       var sawChainTwo = false;
-      for (var i = 0; i < 400 && resolver.chainLevel < 2; i++) {
-        grid.applyGravityStep();
-        resolver.update(0.02);
-        if (resolver.chainLevel == 2) {
+      for (var i = 0; i < 400 && system.chainLevel < 2; i++) {
+        gravity.update(0.02);
+        system.update(0.02, isSettling: () => gravity.isSettling, emit: collect);
+        if (system.chainLevel == 2) {
           sawChainTwo = true;
-          expect(resolver.comboSize, 3);
+          expect(system.comboSize, 3);
         }
       }
       expect(sawChainTwo, isTrue, reason: 'chain nunca chegou a 2');
-      expect(onMatchCalls, [(3, 1), (3, 2)]);
+      expect(
+        cleared.map((e) => (e.comboSize, e.chainLevel)),
+        [(3, 1), (3, 2)],
+        reason: 'cada combinação emite exatamente um MatchCleared',
+      );
 
-      _stepUntilIdle(grid, resolver);
-      expect(resolver.chainLevel, 0);
-      expect(resolver.comboSize, 0);
+      _stepUntilIdle(grid, system);
+      expect(system.chainLevel, 0);
+      expect(system.comboSize, 0);
       // Coluna 0 nunca recebeu reposição: fica vazia depois do vermelho sair.
-      expect(grid.atIndex(3, 0), isNull);
+      expect(grid.blockAt(row(3), col(0)), isNull);
+    });
+  });
+
+  group('cascata do estouro', () {
+    test('o popDelay sai da esquerda para a direita, de baixo para cima', () {
+      // Esta ordem não tem efeito nenhum no combo nem na chain: ela só
+      // escalona o atraso de cada bloco, então errá-la passa calado por
+      // todos os outros testes e só aparece a olho nu, no jogo rodando.
+      final grid = emptyGrid(columns: 3, rows: 6);
+      for (var c = 0; c < 3; c++) {
+        grid.put(row(5), col(c), Block(BlockColor.purple));
+      }
+      // Um L: trio horizontal no piso, mais dois verdes empilhados na
+      // coluna 0 fechando o trio vertical com o canto.
+      for (var c = 0; c < 3; c++) {
+        grid.put(row(4), col(c), Block(BlockColor.green));
+      }
+      grid.put(row(3), col(0), Block(BlockColor.green));
+      grid.put(row(2), col(0), Block(BlockColor.green));
+
+      const timings = MatchTimings.standard;
+      MatchSystem(grid: grid, timings: timings)
+          .update(0, isSettling: () => false, emit: _ignore);
+
+      // Esperado: coluna 0 de baixo para cima (linhas 4, 3, 2), depois as
+      // colunas 1 e 2 do piso.
+      final expected = <(int, int)>[(4, 0), (3, 0), (2, 0), (4, 1), (4, 2)];
+      for (var i = 0; i < expected.length; i++) {
+        final block = grid.blockAt(row(expected[i].$1), col(expected[i].$2));
+        expect(
+          block?.state,
+          BlockState.matched,
+          reason: 'a célula ${expected[i]} tinha que estar combinada',
+        );
+        expect(
+          block!.popDelay,
+          closeTo(i * timings.stagger, 1e-9),
+          reason:
+              'a célula ${expected[i]} tinha que ser a ${i + 1}ª a estourar',
+        );
+      }
     });
   });
 }
 
-void _stepUntilIdle(
-  BlockGrid grid,
-  MatchResolver resolver, {
-  int maxSteps = 400,
-}) {
+void _stepUntilIdle(BlockGrid grid, MatchSystem system, {int maxSteps = 400}) {
+  final gravity = GravitySystem(grid: grid);
   for (var i = 0; i < maxSteps; i++) {
-    grid.applyGravityStep();
-    resolver.update(0.02);
-    if (resolver.chainLevel == 0 &&
-        resolver.comboSize == 0 &&
-        !grid.hasFallingBlocks) {
+    gravity.update(0.02);
+    system.update(0.02, isSettling: () => gravity.isSettling, emit: _ignore);
+    if (system.chainLevel == 0 &&
+        system.comboSize == 0 &&
+        !gravity.isSettling) {
       return;
     }
   }
   fail('grade não assentou depois de $maxSteps passos');
 }
+
+void _ignore(GameEvent event) {}

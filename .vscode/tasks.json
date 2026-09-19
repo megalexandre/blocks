@@ -2,9 +2,27 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "APK debug",
+      "label": "Build APK debug",
       "type": "shell",
       "command": "flutter build apk --debug",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Build APK DEV",
+      "type": "shell",
+      "command": "flutter build apk --debug  -t lib/main_dev.dart",
       "options": {
         "cwd": "${workspaceFolder}"
       },

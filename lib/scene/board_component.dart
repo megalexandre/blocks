@@ -5,25 +5,22 @@ import 'package:flame/components.dart' hide Block;
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 
-import '../game/block_grid.dart';
+import '../game/model/cell.dart';
+import '../game/model/column.dart';
+import '../game/playfield.dart';
 import '../dressing/board_painter.dart';
+import '../dressing/board_viewport.dart';
 import '../dressing/factory_elements.dart';
 import '../config/layout.dart';
-import '../game/match_resolver.dart';
-import '../game/score.dart';
-import '../game/stack_raiser.dart';
-import '../game/swap_controller.dart';
 
-/// O tabuleiro na tela: tempo, geometria, toque e pintura. O estado dos blocos
-/// é do [BlockGrid], as regras de troca são do [SwapController] e as
-/// combinações são do [MatchResolver].
+/// O tabuleiro na tela: **geometria em pixel, toque e pintura**.
+///
+/// Não conduz mais o tempo: o quadro inteiro é do [Playfield], que é Dart
+/// puro. O que sobrou aqui é o que só existe por causa do Flame — converter
+/// um toque em célula, e entregar ao pintor as medidas do quadro.
 class BoardComponent extends PositionComponent
     with DragCallbacks, HasGameReference<FlameGame> {
-  BoardComponent({
-    required this.stackRaiser,
-    required this.score,
-    required this.elements,
-  });
+  BoardComponent({required this.playfield, required this.elements});
 
   static const int columns = 6;
   static const int visibleRows = 12;
@@ -34,24 +31,14 @@ class BoardComponent extends PositionComponent
   /// Elementos já carregados, entregues pela cena.
   final FactoryElements elements;
 
-  final StackRaiser stackRaiser;
-  final Score score;
+  /// O jogo. Este componente só o consulta e o alimenta com o tempo e o
+  /// toque; quem sabe o que fazer com os dois é ele.
+  final Playfield playfield;
 
-  /// A linha extra é a que está entrando por baixo, fora da área visível.
-  final grid = BlockGrid(columns: columns, rowCount: visibleRows + 1);
-
-  late final swapController = SwapController(grid: grid);
-  late final matchResolver = MatchResolver(grid: grid)
-    ..onMatch = score.register;
-
-  double _riseOffset = 0;
   double _cellSize = 24;
-  double _fallTimer = 0;
-
 
   late final _painter = BoardPainter(
-    grid: grid,
-    swapController: swapController,
+    playfield: playfield,
     dangerRows: dangerRows,
     elements: elements,
   );
@@ -61,9 +48,8 @@ class BoardComponent extends PositionComponent
   /// caber exatamente aí, não no canvas inteiro. Alinhado pelo topo do vão
   /// ([GameLayout.boardVoidTop]), onde a passagem se abre — encostado ali
   /// não sobra vão morto entre a arte e o board. Estático e só função das
-  /// constantes — não depende de nenhuma instância, então [WallComponent]
-  /// pode calcular a mesma área sem depender da ordem de montagem dos dois
-  /// componentes.
+  /// constantes: qualquer componente que precise encostar no board calcula a
+  /// mesma área sem depender da ordem de montagem entre os dois.
   static ({double cellSize, Vector2 size, Vector2 position}) layoutFor() {
     final cellSize = GameLayout.boardVoidWidth / columns;
     final size = Vector2(columns * cellSize, visibleRows * cellSize);
@@ -86,23 +72,10 @@ class BoardComponent extends PositionComponent
   @override
   void update(double dt) {
     super.update(dt);
-    _riseOffset += stackRaiser.rowsPerSecond * dt;
-    while (_riseOffset >= 1) {
-      _riseOffset -= 1;
-      grid.shiftUp();
+    for (final _ in playfield.update(dt)) {
+      // Som, partícula e HUD escutam aqui. Por enquanto ninguém escuta, e o
+      // placar já é somado pelo próprio Playfield.
     }
-
-    _fallTimer += dt;
-    while (_fallTimer >= BlockGrid.gravityStepSeconds) {
-      _fallTimer -= BlockGrid.gravityStepSeconds;
-      grid.applyGravityStep();
-    }
-    grid.easeFalls(dt);
-
-    matchResolver.update(dt);
-    stackRaiser.frozen = matchResolver.isResolving || grid.hasFallingBlocks;
-
-    swapController.update(dt);
   }
 
   @override
@@ -110,7 +83,7 @@ class BoardComponent extends PositionComponent
     super.onDragStart(event);
     final cell = _cellAt(game.camera.globalToLocal(event.canvasPosition));
     if (cell != null) {
-      swapController.beginDrag(cell.col, cell.rowId);
+      playfield.grab(cell);
     }
   }
 
@@ -120,40 +93,42 @@ class BoardComponent extends PositionComponent
     // canvasPosition (sempre definido) pela câmera obtemos o ponto no mundo
     // (canvas de referência de GameLayout), que nunca fica indefinido.
     final worldX = game.camera.globalToLocal(event.canvasEndPosition).x;
-    swapController.dragTo(_columnAt(worldX));
+    playfield.dragTo(_columnAt(worldX));
   }
 
   @override
   void onDragEnd(DragEndEvent event) {
     super.onDragEnd(event);
-    swapController.endDrag();
+    playfield.release();
   }
 
-  ({int col, int rowId})? _cellAt(Vector2 worldPoint) {
+  Cell? _cellAt(Vector2 worldPoint) {
     final localX = worldPoint.x - position.x;
     final localY = worldPoint.y - position.y;
     if (localX < 0 || localY < 0 || localX >= size.x || localY >= size.y) {
       return null;
     }
     // Até o piso, nunca a linha que está entrando: ela ainda não está em jogo.
-    final index = (localY / _cellSize + _riseOffset).floor().clamp(
-      0,
-      grid.floorIndex,
+    final raw = (localY / _cellSize + playfield.riseOffset).floor();
+    return (
+      col: _columnAt(worldPoint.x),
+      row: playfield.geometry.clampPlayableRow(raw),
     );
-    return (col: _columnAt(worldPoint.x), rowId: grid.rowIdAt(index));
   }
 
-  int _columnAt(double worldX) =>
-      ((worldX - position.x) / _cellSize).floor().clamp(0, columns - 1);
+  Column _columnAt(double worldX) =>
+      playfield.geometry.clampColumn(((worldX - position.x) / _cellSize).floor());
 
   @override
   void render(Canvas canvas) {
     _painter.render(
       canvas,
-      size: size,
-      cellSize: _cellSize,
-      riseOffset: _riseOffset,
-      zoom: game.camera.viewfinder.zoom,
+      BoardViewport(
+        size: size,
+        cellSize: _cellSize,
+        riseOffset: playfield.riseOffset,
+        zoom: game.camera.viewfinder.zoom,
+      ),
     );
   }
 }

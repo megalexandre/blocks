@@ -1,178 +1,104 @@
-import 'dart:math' as math;
-
 import 'block.dart';
-import 'block_dealer.dart';
+import 'board_geometry.dart';
+import 'board_row.dart';
+import 'cell.dart';
+import 'column.dart';
+import 'row_index.dart';
 
-/// Estado da grade: quem está em cada célula, e as regras de que a grade é
-/// dona — troca e queda. Não sabe nada de pixel: o tempo entra só como `dt`,
-/// no ritmo que ela mesma define em [gravityStepSeconds].
+/// Quem está em cada célula. Só isso.
 ///
-/// Uma linha é endereçada por um `rowId` **estável**: subir a pilha não
-/// renumera as linhas existentes, então quem guardar um id continua apontando
-/// para a mesma linha. Use [hasRow] antes de ler um id guardado, porque a
-/// linha pode já ter saído pelo topo.
+/// Perdeu dois papéis que acumulava: **fábrica** — a pilha de abertura e o
+/// sorteio foram para `StackFiller` — e **motor de física** — a queda e o
+/// rastro foram para `GravitySystem`. O que sobrou não tem `dt` em assinatura
+/// nenhuma, e é isso que faz dela estado em vez de sistema.
+///
+/// Só existe uma coordenada de linha aqui: a **posição visual**, 0 no topo
+/// da tela. Ela muda de significado a cada [shiftUp], então nunca deve ser
+/// guardada entre frames — quem precisa apontar para uma linha ao longo do
+/// tempo guarda a [BoardRow] e pergunta a posição com [positionOf] na hora de
+/// usar.
 class BlockGrid {
+  /// Nasce **vazia, sempre**.
+  ///
+  /// Antes o construtor sorteava a pilha de abertura e a linha de entrada, e
+  /// era por isso que existiam um `BlockGrid.empty` e um `place` marcados "só
+  /// para teste": não havia como montar um cenário previsível sem uma porta
+  /// dos fundos. Com quem enche a grade separado (`StackFiller`), a porta dos
+  /// fundos virou a porta da frente — [put] é a mesma API para o jogo e para
+  /// o teste.
+  BlockGrid(this.geometry)
+    : _rows = List.generate(
+        geometry.rowCount,
+        (_) => BoardRow.empty(geometry.columnCount),
+        growable: true,
+      );
 
-  BlockGrid({required this.columns, required this.rowCount}) {
-    _allocateEmptyRows();
-    _dealStartingStack();
-    _fillRow(incomingIndex);
-  }
-
-  /// Só para teste: começa com a grade vazia, sem pilha nem linha de entrada
-  /// sorteadas, para montar cenários determinísticos com [place].
-  BlockGrid.empty({required this.columns, required this.rowCount}) {
-    _allocateEmptyRows();
-  }
-
-  /// Só para teste: põe (ou remove, com `null`) um bloco numa célula, sem
-  /// passar pelo sorteio de cor.
-  void place(int index, int col, BlockColor? color) {
-    _rows[index][col] = color == null ? null : Block(color);
-  }
-
-  final int columns;
-
-  /// Linhas mantidas em memória: as visíveis mais a que está entrando por baixo.
-  final int rowCount;
-
-  /// Quantos iguais em sequência formam uma combinação.
-  static const int matchLength = 3;
-
-  /// O passo da gravidade: um bloco sem apoio desce uma linha a cada tanto.
-  /// É o único número que descreve a queda — [applyGravityStep] anda nesse
-  /// ritmo e [easeFalls] derrete o rastro no mesmo, e quem conta o tempo lê
-  /// daqui em vez de guardar a própria cópia.
-  static const double gravityStepSeconds = 0.035;
-
-  /// A linha que está entrando por baixo, ainda fora da área visível. Ela é
-  /// inerte: não combina nem cai, e serve de piso para a pilha.
-  int get incomingIndex => rowCount - 1;
-
-  /// Última linha jogável — a mais baixa que o jogador enxerga e manipula.
-  int get floorIndex => rowCount - 2;
-
-  /// Quem escolhe as alturas e as cores. A grade só põe onde ele manda.
-  late final _dealer = BlockDealer(this);
+  final BoardGeometry geometry;
 
   /// Ordem visual: índice 0 é o topo, o último é a linha que está entrando.
-  final List<List<Block?>> _rows = [];
+  final List<BoardRow> _rows;
 
-  /// Quantas linhas já saíram pelo topo. É o deslocamento entre id e índice.
-  int _consumedRows = 0;
+  /// A linha que está na posição visual [row].
+  BoardRow rowAt(RowIndex row) => _rows[row.value];
 
-  int get topRowId => _consumedRows;
-  int get bottomRowId => _consumedRows + rowCount - 1;
-
-  bool hasRow(int rowId) => rowId >= topRowId && rowId <= bottomRowId;
-
-  /// Índice visual (0 = topo) da linha [rowId].
-  int indexOf(int rowId) => rowId - _consumedRows;
-
-  /// Id da linha que está no índice visual [index].
-  int rowIdAt(int index) => _consumedRows + index;
-
-  Block? at(int rowId, int col) => _rows[indexOf(rowId)][col];
-
-  /// Leitura pela ordem visual, para quem desenha e para quem resolve
-  /// combinações dentro de um mesmo frame.
-  Block? atIndex(int index, int col) => _rows[index][col];
-
-  void remove(int index, int col) {
-    _rows[index][col] = null;
-  }
-
-  void swap(int rowId, int colA, int colB) {
-    final row = _rows[indexOf(rowId)];
-    final held = row[colA];
-    row[colA] = row[colB];
-    row[colB] = held;
-  }
-
-  /// A linha do topo sai, uma nova entra por baixo. Os ids já existentes
-  /// continuam valendo.
-  void shiftUp() {
-    _rows.removeAt(0);
-    _rows.add(List<Block?>.filled(columns, null));
-    _consumedRows++;
-    _fillRow(incomingIndex);
-  }
-
-  /// Existe bloco no ar, ainda caindo.
-  bool get hasFallingBlocks {
-    for (var index = 0; index < incomingIndex; index++) {
-      for (var col = 0; col < columns; col++) {
-        if (_rows[index][col] != null && _rows[index + 1][col] == null) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  /// Desce em uma linha todo bloco que não tem apoio. Bloco piscando ou
-  /// estourando não cai.
-  void applyGravityStep() {
-    for (var index = floorIndex; index >= 0; index--) {
-      for (var col = 0; col < columns; col++) {
-        final block = _rows[index][col];
-        if (block != null && block.isIdle && _rows[index + 1][col] == null) {
-          _rows[index + 1][col] = block;
-          _rows[index][col] = null;
-          block.fallOffset += 1;
-        }
-      }
-    }
-  }
-
-  /// Derrete o rastro visual de quem acabou de cair uma linha. A taxa é o
-  /// próprio [gravityStepSeconds]: um bloco caindo várias linhas seguidas
-  /// ganha +1 de rastro a cada passo e perde esse mesmo tanto antes do
-  /// próximo, então o movimento sai contínuo em vez de picotado — com dois
-  /// números distintos o rastro ia se acumular ou sumir rápido demais.
+  /// Posição visual de [row] agora, ou nulo se ela já saiu pelo topo.
   ///
-  /// Fica aqui junto do [applyGravityStep], que é quem soma: o rastro tem um
-  /// dono só, em vez de ser somado num lugar e derretido em outro.
-  void easeFalls(double dt) {
-    final decay = dt / gravityStepSeconds;
-    for (var index = 0; index < rowCount; index++) {
-      for (var col = 0; col < columns; col++) {
-        final block = _rows[index][col];
-        if (block != null && block.fallOffset > 0) {
-          block.fallOffset = math.max(0, block.fallOffset - decay);
-        }
-      }
-    }
+  /// Varredura linear, mas são 13 linhas: quem chama está desenhando um
+  /// frame, não percorrendo um índice grande.
+  RowIndex? positionOf(BoardRow row) {
+    final found = _rows.indexOf(row);
+    return found < 0 ? null : RowIndex(found);
   }
 
-  void _allocateEmptyRows() {
-    _rows
-      ..clear()
-      ..addAll(
-        List.generate(rowCount , (_) => List<Block?>.filled(columns, null)),
-      );
+  /// A linha ainda está no tabuleiro.
+  bool contains(BoardRow row) => _rows.contains(row);
+
+  /// O bloco em (row, col), ou nulo — inclusive **fora dos limites**.
+  ///
+  /// Tolerante de propósito: quem procura uma sequência de mesma cor anda até
+  /// achar diferente, e devolver nulo na borda faz o laço parar sozinho em
+  /// vez de repetir uma comparação de contorno a cada passo. A escrita é o
+  /// contrário: [put] é estrita, para um erro de coordenada estourar na hora
+  /// em que acontece em vez de sumir.
+  Block? blockAt(RowIndex row, Column col) =>
+      geometry.holds(row, col) ? _rows[row.value][col] : null;
+
+  void put(RowIndex row, Column col, Block? block) {
+    assert(geometry.holds(row, col), 'célula fora do tabuleiro');
+    _rows[row.value][col] = block;
   }
 
-  /// Pilha de abertura: cada coluna recebe uma altura sorteada pelo
-  /// carteador, para o tabuleiro não começar com o topo reto.
-  void _dealStartingStack() {
-    final heights = _dealer.startHeights();
-    final tallest = heights.reduce(math.max);
-    // Camada por camada, a partir do piso: assim o carteador enxerga os
-    // vizinhos de baixo e da esquerda já postos, e consegue vetar a cor deles.
-    for (var layer = 0; layer < tallest; layer++) {
-      final index = floorIndex - layer;
-      for (var col = 0; col < columns; col++) {
-        if (layer < heights[col]) {
-          _rows[index][col] = Block(_dealer.colorFor(index, col));
-        }
-      }
-    }
+  void clear(RowIndex row, Column col) => put(row, col, null);
+
+  void move({required Cell from, required Cell to}) {
+    put(to.row, to.col, blockAt(from.row, from.col));
+    clear(from.row, from.col);
   }
 
-  void _fillRow(int index) {
-    for (var col = 0; col < columns; col++) {
-      _rows[index][col] = Block(_dealer.colorFor(index, col));
-    }
+  /// Troca dois blocos de lugar dentro de uma linha.
+  ///
+  /// **Passa por aqui, e não pela [BoardRow] direto**: a troca mexia na linha
+  /// sem a grade saber, o que contradizia a regra — escrita no próprio
+  /// código — de que a grade é dona exclusiva do próprio estado. Dart não tem
+  /// como proibir isso no compilador; o que dá para fazer é a troca ter uma
+  /// porta só, e ela ser esta.
+  void swap(BoardRow row, Column a, Column b) => row.swapCells(a, b);
+
+  /// Os dois lados podem ser trocados agora: célula vazia pode, bloco só se
+  /// estiver assentado.
+  bool canSwap(BoardRow row, Column a, Column b) =>
+      row.isSwappable(a) && row.isSwappable(b);
+
+  /// A linha do topo sai do tabuleiro, uma vazia entra por baixo. Quem
+  /// guardou uma [BoardRow] continua apontando para a mesma linha — só a
+  /// posição visual dela mudou.
+  ///
+  /// Devolve a linha que saiu, e **não** enche a que entrou: encher é do
+  /// `StackFiller`, e quem saiu interessa a quem precisa saber se ela levava
+  /// bloco junto — sair do topo com bloco é o fim da partida.
+  BoardRow shiftUp() {
+    final leaving = _rows.removeAt(0);
+    _rows.add(BoardRow.empty(geometry.columnCount));
+    return leaving;
   }
 }
