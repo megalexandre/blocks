@@ -12,6 +12,12 @@ mkdir -p "$HOME/.claude/projects"
 # Sem servidor X (macOS sem XQuartz, por exemplo) o socket não existe.
 [ -d /tmp/.X11-unix ] || mkdir -m 1777 /tmp/.X11-unix
 
+# Pasta do socket de áudio. Com PulseAudio ou pipewire-pulse rodando ela já
+# existe e isto não faz nada; sem eles, fica vazia e o jogo roda mudo. O
+# caminho de reserva tem que bater com o valor padrão do mount no
+# devcontainer.json.
+mkdir -p "${XDG_RUNTIME_DIR:-/tmp/blocos-no-runtime-dir}/pulse"
+
 # Cookie do X11, para a janela do app abrir na tela do host. É regravado a
 # cada abertura porque muda a cada login. Fica numa pasta própria, montada
 # inteira: um mount de arquivo prende o inode antigo, e o container

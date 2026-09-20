@@ -32,6 +32,7 @@ dependencies:
     sdk: flutter
 
   flame: ^1.38.2
+  flutter_soloud: ^5.1.2
 
 dev_dependencies:
   flutter_test:
@@ -59,6 +60,8 @@ flutter:
     - assets/images/
     - assets/images/selector/
     - assets/images/blocks/
+    - assets/images/scenario/
+    - assets/sounds/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

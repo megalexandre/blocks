@@ -63,6 +63,7 @@ class MatchSystem {
   /// parada, nada estava resolvendo, e a chain era zerada justo no instante
   /// que [_chainActive] existe para atravessar — a combinação seguinte
   /// entrava como chain 1 em vez de 2.
+  ///
   /// Quem soma pontos ouve o evento em vez de espiar [comboSize] a cada
   /// quadro: os dois campos ficam parados por vários quadros enquanto a
   /// combinação pisca e estoura, e um placar que somasse por quadro contaria
@@ -72,7 +73,7 @@ class MatchSystem {
     required bool Function() isSettling,
     required EmitEvent emit,
   }) {
-    _advance(dt);
+    _advance(dt, emit);
     final matchedNow = _detect();
     if (matchedNow > 0) {
       _comboSize = matchedNow;
@@ -103,7 +104,14 @@ class MatchSystem {
     return false;
   }
 
-  void _advance(double dt) {
+  /// Leva cada bloco em resolução um passo adiante: quem terminou de piscar
+  /// começa a estourar, quem terminou de estourar sai da grade.
+  ///
+  /// Avisa uma vez quando blocos entram no estouro. O grupo inteiro entra no
+  /// mesmo quadro — todos começaram a piscar juntos, com o relógio zerado
+  /// junto —, então o aviso sai uma vez por grupo e não uma por bloco.
+  void _advance(double dt, EmitEvent emit) {
+    var popping = 0;
     for (final row in grid.geometry.playableRows) {
       for (final col in grid.geometry.columns) {
         final block = grid.blockAt(row, col);
@@ -115,6 +123,7 @@ class MatchSystem {
           case BlockState.matched:
             if (block.stateTime >= timings.flash) {
               block.enter(BlockState.popping);
+              popping++;
             }
           case BlockState.popping:
             if (block.stateTime >= block.clearAt) {
@@ -124,6 +133,9 @@ class MatchSystem {
             break;
         }
       }
+    }
+    if (popping > 0) {
+      emit(PopStarted(count: popping));
     }
   }
 

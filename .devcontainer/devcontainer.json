@@ -25,14 +25,25 @@
   // Sem /dev/dri no container, o Mesa trava tentando negociar DRI2/EGL por
   // hardware antes de desistir (a janela nunca chega a abrir). Força
   // renderização por software para pular essa negociação.
+  //
+  // O som sai pelo PulseAudio do host (ou pelo pipewire-pulse, que usa o
+  // mesmo socket): o container não tem placa de som, então fala com o
+  // servidor de áudio da sua sessão pelo socket montado abaixo.
   "containerEnv": {
     "DISPLAY": "${localEnv:DISPLAY}",
     "XAUTHORITY": "/tmp/.host-x11/Xauthority",
-    "LIBGL_ALWAYS_SOFTWARE": "1"
+    "LIBGL_ALWAYS_SOFTWARE": "1",
+    "PULSE_SERVER": "unix:/run/host-pulse/native"
   },
   "mounts": [
     "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
     "source=${localEnv:HOME}/.cache/blocos-devcontainer,target=/tmp/.host-x11,type=bind,readonly",
+    // A pasta inteira e não o arquivo do socket, pelo mesmo motivo do cookie
+    // do X11: se o servidor de áudio reiniciar, o socket novo é outro inode,
+    // e um mount de arquivo continuaria preso ao velho. O valor depois do `:`
+    // é para host sem XDG_RUNTIME_DIR (macOS): o initialize.sh cria a pasta,
+    // ela fica vazia, e o jogo roda mudo em vez de o container não subir.
+    "source=${localEnv:XDG_RUNTIME_DIR:/tmp/blocos-no-runtime-dir}/pulse,target=/run/host-pulse,type=bind",
     // Volumes nomeados: o cache de pacotes e o do Gradle sobrevivem a recriar
     // o container, e não sujam o diretório do projeto no host.
     "source=blocos-pub-cache,target=/home/ubuntu/.pub-cache,type=volume",

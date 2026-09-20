@@ -63,6 +63,34 @@ final class ToppedOut extends GameEvent {
   const ToppedOut();
 }
 
+/// Blocos terminaram de cair neste quadro: estavam descendo e encontraram
+/// apoio.
+///
+/// **Um evento por quadro, com a contagem**, e não um por bloco. Uma fila
+/// inteira pousa no mesmo passo de gravidade, e quem transforma isto em som
+/// quer um impacto só — seis cópias do mesmo som disparadas juntas não soam
+/// seis vezes mais alto, soam embolado.
+final class BlocksLanded extends GameEvent {
+  const BlocksLanded({required this.count});
+
+  final int count;
+}
+
+/// Blocos começaram a sumir: acabaram de piscar e entraram no estouro.
+///
+/// É o início do efeito visual de encolher e desbotar, e não a combinação em
+/// si — essa é [MatchCleared], que acontece meio segundo antes, quando o
+/// grupo começa a piscar. Os dois são momentos diferentes que alguém pode
+/// querer marcar de formas diferentes.
+///
+/// Um por quadro, pelo mesmo motivo de [BlocksLanded]: o grupo inteiro entra
+/// no estouro no mesmo quadro, porque todos começaram a piscar juntos.
+final class PopStarted extends GameEvent {
+  const PopStarted({required this.count});
+
+  final int count;
+}
+
 /// Onde um sistema anota o que fez.
 ///
 /// Função e não classe: um argumento só, de um tipo selado, já é a menor

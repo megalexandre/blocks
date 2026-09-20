@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import '../game_event.dart';
+import '../model/block.dart';
 import '../model/block_grid.dart';
 
 /// A queda inteira: o ritmo, o acumulador, o passo e o rastro.
@@ -20,6 +22,13 @@ class GravitySystem {
 
   double _timer = 0;
 
+  /// Quem desceu no último passo.
+  ///
+  /// É o que permite saber quando um bloco **pousa**: ele estava aqui e, no
+  /// passo seguinte, não conseguiu descer. Por identidade, e não por
+  /// igualdade: o que interessa é aquele bloco, não um bloco da mesma cor.
+  var _moving = Set<Block>.identity();
+
   /// Um quadro de queda: quantos passos couberem no [dt], e depois o rastro
   /// derrete por esse mesmo [dt].
   ///
@@ -27,14 +36,23 @@ class GravitySystem {
   /// derretimento uma vez no fim**. Invertendo, um bloco ganharia +1 de
   /// rastro e perderia o `dt` inteiro dentro do mesmo quadro, e o movimento
   /// mudaria de cara.
-  void update(double dt) {
+  ///
+  /// [emit] é opcional porque os pousos são uma saída a mais, não parte da
+  /// mecânica: quem só quer ver a queda acontecer não precisa ouvi-la.
+  void update(double dt, {EmitEvent emit = _discard}) {
     _timer += dt;
+    var landed = 0;
     while (_timer >= stepSeconds) {
       _timer -= stepSeconds;
-      _applyStep();
+      landed += _applyStep();
     }
     _easeTrails(dt);
+    if (landed > 0) {
+      emit(BlocksLanded(count: landed));
+    }
   }
+
+  static void _discard(GameEvent event) {}
 
   /// Ainda tem coisa se mexendo: bloco que vai cair, ou rastro derretendo.
   ///
@@ -64,22 +82,44 @@ class GravitySystem {
     return false;
   }
 
-  /// Desce em uma linha todo bloco que não tem apoio. Bloco piscando ou
-  /// estourando não cai: ele já está em resolução.
-  void _applyStep() {
+  /// Desce em uma linha todo bloco que não tem apoio, e devolve quantos
+  /// pousaram. Bloco piscando ou estourando não cai: ele já está em resolução.
+  ///
+  /// Pousar é **ter descido no passo anterior e não descer neste**, seja qual
+  /// for o motivo. Não basta olhar só para "achou apoio": um bloco que cai e
+  /// fecha uma combinação já está piscando no passo seguinte, e com um filtro
+  /// de bloco parado ele nunca contaria como pousado — justamente o impacto
+  /// que abre uma chain.
+  ///
+  /// Contado um passo depois da chegada, e não no passo em que o bloco entra
+  /// na célula final. Isso é o que casa com a tela: ele chega com um rastro
+  /// de uma linha inteira, e esse rastro leva exatamente um passo para
+  /// derreter — o toque no chão que o jogador vê é agora.
+  int _applyStep() {
+    final movedNow = Set<Block>.identity();
+    var landed = 0;
     for (final row in grid.geometry.rowsBottomUp) {
       for (final col in grid.geometry.columns) {
         final block = grid.blockAt(row, col);
-        if (block == null || !block.isIdle) {
+        if (block == null) {
           continue;
         }
-        if (grid.blockAt(row.below, col) != null) {
+        final canFall = block.isIdle && grid.blockAt(row.below, col) == null;
+        if (!canFall) {
+          if (_moving.contains(block)) {
+            landed++;
+          }
           continue;
         }
         grid.move(from: (row: row, col: col), to: (row: row.below, col: col));
         block.fallOffset += 1;
+        movedNow.add(block);
       }
     }
+    // Trocado inteiro a cada passo: um bloco que saiu da grade no meio da
+    // queda simplesmente não aparece mais aqui, em vez de ficar preso.
+    _moving = movedNow;
+    return landed;
   }
 
   /// Derrete o rastro de quem acabou de cair uma linha. A taxa é o próprio

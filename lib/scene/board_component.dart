@@ -11,6 +11,7 @@ import '../game/playfield.dart';
 import '../dressing/board_painter.dart';
 import '../dressing/board_viewport.dart';
 import '../dressing/factory_elements.dart';
+import '../dressing/game_sounds.dart';
 import '../config/layout.dart';
 
 /// O tabuleiro na tela: **geometria em pixel, toque e pintura**.
@@ -72,9 +73,10 @@ class BoardComponent extends PositionComponent
   @override
   void update(double dt) {
     super.update(dt);
-    for (final _ in playfield.update(dt)) {
-      // Som, partícula e HUD escutam aqui. Por enquanto ninguém escuta, e o
-      // placar já é somado pelo próprio Playfield.
+    // O placar já é somado pelo próprio Playfield; aqui escuta quem só existe
+    // por causa da tela e do alto-falante.
+    for (final event in playfield.update(dt)) {
+      GameSounds.instance.handle(event);
     }
   }
 

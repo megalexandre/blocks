@@ -3,12 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'scene/game_scene.dart';
+import 'dressing/game_sounds.dart';
 import 'dressing/palette.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  // Antes de montar a tela: o motor de áudio leva um tempo para subir, e
+  // o primeiro impacto acontece poucos décimos depois de a partida abrir.
+  GameSounds.warmUp();
   runApp(const BlocosApp());
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:blocos/game/board_script.dart';
 import 'package:blocos/game/model/block.dart';
 import 'package:blocos/game/model/column.dart';
 import 'package:blocos/game/game_event.dart';
@@ -265,6 +266,69 @@ void main() {
         reason:
             'as colunas começaram a cair em quadros diferentes '
             '($startedFalling) — a pilha desabou em escada',
+      );
+    });
+  });
+
+  group('os momentos que viram som', () {
+    /// Roda até [frames] quadros e devolve cada evento com o quadro em que
+    /// saiu, para dar para medir o tempo entre um e outro.
+    List<(int, GameEvent)> timeline(Playfield playfield, int frames) => [
+      for (var f = 0; f < frames; f++)
+        for (final event in playfield.update(frame)) (f, event),
+    ];
+
+    Playfield scripted(String drawing) {
+      final playfield = seeded(20);
+      BoardScript(drawing).paintOn(playfield.grid);
+      return playfield;
+    }
+
+    test('o estouro começa uma vez por grupo, meio segundo depois do pisca', () {
+      final playfield = scripted('''
+        GBY...
+        RRR...
+      ''');
+
+      final events = timeline(playfield, 120);
+      final cleared = events.where((e) => e.$2 is MatchCleared).toList();
+      final popped = events.where((e) => e.$2 is PopStarted).toList();
+
+      expect(cleared, hasLength(1));
+      expect(popped, hasLength(1), reason: 'um grupo, um início de estouro');
+      expect((popped.single.$2 as PopStarted).count, 3);
+
+      // O pisca dura 0,5 s: trinta quadros a 60 fps, com folga de um para o
+      // arredondamento do acumulador.
+      final gap = popped.single.$1 - cleared.single.$1;
+      expect(gap, inInclusiveRange(29, 31),
+          reason: 'o som do estouro tem que sair quando os blocos começam a '
+              'sumir, não quando começam a piscar');
+    });
+
+    test('bloco que cai e fecha uma combinação ainda anuncia o pouso', () {
+      // O caso que decidiu o desenho: o bloco chega e no mesmo quadro já
+      // começa a piscar. Contando só quem "achou apoio e está parado", esse
+      // impacto — justamente o que abre uma chain — nunca soaria.
+      final playfield = scripted('''
+        .BB...
+        RRRB..
+      ''');
+
+      final events = timeline(playfield, 240);
+      final chain2 = events.indexWhere(
+        (e) => e.$2 is MatchCleared && (e.$2 as MatchCleared).chainLevel == 2,
+      );
+      expect(chain2, isNot(-1), reason: 'o cenário tinha que fechar chain 2');
+
+      final landings = events
+          .where((e) => e.$2 is BlocksLanded)
+          .map((e) => (e.$2 as BlocksLanded).count)
+          .fold(0, (a, b) => a + b);
+      expect(
+        landings,
+        greaterThanOrEqualTo(2),
+        reason: 'os dois azuis que caíram e fecharam o trio não soaram',
       );
     });
   });

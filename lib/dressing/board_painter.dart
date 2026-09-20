@@ -3,6 +3,7 @@ import 'dart:ui';
 
 
 import 'palette.dart';
+import 'scenario_background.dart';
 import '../game/model/block.dart';
 import '../game/model/column.dart';
 import '../game/playfield.dart';
@@ -21,7 +22,8 @@ class BoardPainter {
     required this.dangerRows,
     required FactoryElements elements,
   }) : _blocks = elements.blocks,
-       _selector = elements.selector;
+       _selector = elements.selector,
+       _scenario = elements.scenario;
 
   /// Lido, nunca escrito: o pintor pergunta ao jogo onde está cada coisa.
   final Playfield playfield;
@@ -39,8 +41,8 @@ class BoardPainter {
 
   final BlockSprites _blocks;
   final Selector _selector;
+  final ScenarioBackground _scenario;
 
-  final _panelPaint = Paint()..color = Palette.playfield;
   final _panelBorderPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 2
@@ -58,10 +60,12 @@ class BoardPainter {
       Rect.fromLTWH(0, 0, view.size.x, view.size.y),
       Radius.circular(view.cellSize * 0.2),
     );
-    canvas.drawRRect(panel, _panelPaint);
-
     canvas.save();
     canvas.clipRRect(panel);
+    // A paisagem entra recortada pelo painel, e não desenhada antes dele:
+    // assim ela ganha os cantos arredondados do tabuleiro de graça, em vez
+    // de aparecer quadrada por baixo das bordas.
+    _scenario.render(canvas, panel.outerRect);
     _renderBlocks(canvas, view);
     _renderSwapAnimation(canvas, view);
     _renderCursor(canvas, view);

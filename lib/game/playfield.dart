@@ -108,7 +108,7 @@ class Playfield {
   List<GameEvent> update(double dt) {
     final events = <GameEvent>[];
     _raise(events.add, dt);
-    _gravity.update(dt);
+    _gravity.update(dt, emit: events.add);
     // `isSettling` é perguntado depois de o sistema de combinação tirar da
     // grade quem terminou de estourar — é essa remoção que solta o bloco de
     // cima, e perguntar antes perderia a chain nesse instante exato.
