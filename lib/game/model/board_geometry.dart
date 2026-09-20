@@ -13,8 +13,16 @@ import 'row_index.dart';
 /// `List<int>` em tempo de execução: o laço duplo ganha nome no lugar de
 /// `for (var i = 0; i < n; i++)` sem custar uma alocação.
 class BoardGeometry {
-  BoardGeometry({required this.columnCount, required this.visibleRowCount})
-    : rowCount = visibleRowCount + 1,
+  BoardGeometry({
+    required this.columnCount,
+    required this.visibleRowCount,
+    this.dangerRowCount = 2,
+  }) : rowCount = visibleRowCount + 1,
+       dangerRows = List.generate(
+         dangerRowCount,
+         RowIndex.new,
+         growable: false,
+       ),
       columns = List.generate(columnCount, Column.new, growable: false),
       allRows = List.generate(
         visibleRowCount + 1,
@@ -59,6 +67,17 @@ class BoardGeometry {
   /// primeiro quem está mais embaixo é o que faz uma coluna inteira cair num
   /// passo só, em vez de uma linha por passo.
   final List<RowIndex> rowsBottomUp;
+
+  /// Quantas linhas de folga existem entre o topo e a zona de perigo.
+  final int dangerRowCount;
+
+  /// As linhas da folga do topo, de cima para baixo.
+  ///
+  /// Com bloco em qualquer uma delas o jogador está por um fio: falta pouco
+  /// para a pilha empurrar alguma coisa para fora. Era uma constante de quem
+  /// desenha, quando a linha tracejada não passava de enfeite; virou medida
+  /// do tabuleiro quando a derrota passou a existir.
+  final List<RowIndex> dangerRows;
 
   /// A linha que está prestes a sair pelo topo.
   RowIndex get topRow => const RowIndex(0);

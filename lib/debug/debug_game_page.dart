@@ -30,7 +30,10 @@ class _DebugGamePageState extends State<DebugGamePage> {
   bool _showData = false;
   bool _stepping = false;
 
-  GameScene _build() => GameScene(playfield: widget.scenario.build());
+  /// Entrega a **receita** do cenário, e não um jogo pronto: assim o botão
+  /// "jogar de novo" do fim de partida remonta este mesmo cenário, em vez de
+  /// cair numa partida normal.
+  GameScene _build() => GameScene(createPlayfield: widget.scenario.build);
 
   /// Monta o cenário de novo, do quadro zero.
   ///
@@ -49,7 +52,7 @@ class _DebugGamePageState extends State<DebugGamePage> {
   }
 
   void _addOverlay() {
-    _scene.world.add(BoardDebugOverlay(playfield: _scene.playfield));
+    _scene.world.add(BoardDebugOverlay());
   }
 
   void _toggleData() {

@@ -24,7 +24,7 @@ class BoardScript {
 
   final String text;
 
-  /// A letra de cada cor. Primeira letra do nome em inglês — as cinco são
+  /// A letra de cada cor. Primeira letra do nome em inglês — as seis são
   /// distintas, então não há ambiguidade a resolver.
   static const Map<String, BlockColor> _byLetter = {
     'R': BlockColor.red,
@@ -32,6 +32,7 @@ class BoardScript {
     'G': BlockColor.green,
     'Y': BlockColor.yellow,
     'P': BlockColor.purple,
+    'C': BlockColor.cyan,
   };
 
   static const String empty = '.';

@@ -14,11 +14,16 @@ class BlockSprites {
   static const double tileSize = 128;
 
   /// Coluna de cada cor, na ordem em que a arte foi desenhada: coração,
-  /// círculo, gota (sem cor correspondente no jogo, não usada), losango,
-  /// estrela, triângulo.
+  /// círculo, gota, losango, estrela, triângulo.
+  ///
+  /// A gota já estava desenhada e sem uso quando o jogo tinha cinco cores
+  /// para seis peças na folha. A forma importa tanto quanto o tom: ciano e
+  /// azul são vizinhos no espectro, e é a silhueta — gota contra triângulo —
+  /// que separa os dois de relance num tabuleiro cheio.
   static const Map<BlockColor, int> _column = {
     BlockColor.red: 0,
     BlockColor.green: 1,
+    BlockColor.cyan: 2,
     BlockColor.purple: 3,
     BlockColor.yellow: 4,
     BlockColor.blue: 5,
@@ -36,6 +41,15 @@ class BlockSprites {
   final Map<BlockColor, Sprite> _sprites = {};
 
   Future<void> load() async {
+    // Uma cor sem tile só apareceria como estouro no meio de uma partida, na
+    // primeira vez que ela fosse sorteada. Aqui falha na abertura, dizendo
+    // qual.
+    assert(() {
+      final semTile = BlockColor.values.where(
+        (color) => !_column.containsKey(color),
+      );
+      return semTile.isEmpty;
+    }(), 'há cor sem tile na folha de sprites');
     final image = await Flame.images.load(GameAsset.blocks.fileName);
     for (final entry in _column.entries) {
       _sprites[entry.key] = Sprite(

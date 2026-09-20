@@ -1,4 +1,4 @@
-enum BlockColor { red, blue, green, yellow, purple }
+enum BlockColor { red, blue, green, yellow, purple, cyan }
 
 enum BlockState { idle, matched, popping }
 

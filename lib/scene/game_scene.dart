@@ -5,23 +5,31 @@ import 'package:flame/components.dart' show Anchor;
 import 'package:flame/game.dart';
 
 import '../dressing/factory_elements.dart';
-import 'board_component.dart';
-import '../config/layout.dart';
 import '../game/playfield.dart';
+import '../config/layout.dart';
+import 'board_component.dart';
+import 'boost_component.dart';
+import 'game_over_component.dart';
+import 'hud_component.dart';
 
 class GameScene extends FlameGame {
-  /// Recebe o jogo pronto em vez de criá-lo: é o que deixa uma partida
-  /// começar de um tabuleiro montado, em vez de sempre da pilha sorteada.
-  /// Sem argumento, é a partida normal.
-  GameScene({Playfield? playfield})
-    : playfield = playfield ?? Playfield.standard(),
+  /// Recebe uma **receita** de partida, não uma partida pronta.
+  ///
+  /// É o que permite recomeçar: perder e jogar de novo é montar outro
+  /// [Playfield] do mesmo jeito que o primeiro, e só quem criou a cena sabe
+  /// qual jeito é esse — a partida normal, ou um cenário do modo de
+  /// desenvolvimento. Guardar o jogo pronto deixaria a cena sem como refazê-lo.
+  GameScene({Playfield Function()? createPlayfield})
+    : _createPlayfield = createPlayfield ?? Playfield.standard,
       super(camera: _buildCamera());
 
-  /// O jogo. A cena o entrega ao tabuleiro; ninguém mais precisa saber que a
-  /// pilha, o placar e a gravidade existem separados.
-  final Playfield playfield;
+  final Playfield Function() _createPlayfield;
 
-  late final BoardComponent board;
+  /// O jogo desta partida. Troca inteiro a cada [restart].
+  late Playfield playfield = _createPlayfield();
+
+  late final FactoryElements elements;
+  late BoardComponent board;
 
   static CameraComponent _buildCamera() {
     final camera = CameraComponent.withFixedResolution(
@@ -37,7 +45,25 @@ class GameScene extends FlameGame {
 
   @override
   Future<void> onLoad() async {
-    final elements = await FactoryElements.load();
+    elements = await FactoryElements.load();
+    board = BoardComponent(playfield: playfield, elements: elements);
+    await world.addAll([
+      board,
+      ...boostBands(),
+      HudComponent(),
+      GameOverComponent(),
+    ]);
+  }
+
+  /// Joga fora a partida perdida e monta outra.
+  ///
+  /// O tabuleiro é recriado junto porque ele e o pintor recebem o jogo no
+  /// construtor. O placar e o painel de fim de jogo não: eles perguntam à
+  /// cena a cada quadro, e por isso atravessam o recomeço sem saber que
+  /// houve um.
+  Future<void> restart() async {
+    playfield = _createPlayfield();
+    board.removeFromParent();
     board = BoardComponent(playfield: playfield, elements: elements);
     await world.add(board);
   }

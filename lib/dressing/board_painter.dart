@@ -17,19 +17,12 @@ import 'selector.dart';
 /// quem cuida de tempo, toque e geometria é o `BoardComponent`, que a cada
 /// quadro entrega aqui a medida da célula e onde a pilha está.
 class BoardPainter {
-  BoardPainter({
-    required this.playfield,
-    required this.dangerRows,
-    required FactoryElements elements,
-  }) : _blocks = elements.blocks,
+  BoardPainter({required this.playfield, required FactoryElements elements}) : _blocks = elements.blocks,
        _selector = elements.selector,
        _scenario = elements.scenario;
 
   /// Lido, nunca escrito: o pintor pergunta ao jogo onde está cada coisa.
   final Playfield playfield;
-
-  /// Linhas de folga entre o topo do tabuleiro e a linha de perigo.
-  final int dangerRows;
 
   /// Quantas vezes o bloco combinado pisca por segundo.
   static const double flashHz = 6;
@@ -49,9 +42,9 @@ class BoardPainter {
     ..color = Palette.playfieldBorder;
   final _overlayPaint = Paint()..isAntiAlias = true;
   final _dangerPaint = Paint()
-    ..color = Palette.dangerLine
     ..strokeWidth = 2
     ..strokeCap = StrokeCap.round;
+  final _veilPaint = Paint()..color = Palette.gameOverVeil;
 
   /// Desenha o quadro. Todas as medidas vêm em [view] — o pintor não guarda
   /// nenhuma delas entre um quadro e outro.
@@ -71,6 +64,9 @@ class BoardPainter {
     _renderCursor(canvas, view);
     canvas.restore();
 
+    if (playfield.isOver) {
+      canvas.drawRRect(panel, _veilPaint);
+    }
     canvas.drawRRect(panel, _panelBorderPaint);
     _renderDangerLine(canvas, view);
   }
@@ -257,10 +253,18 @@ class BoardPainter {
     );
   }
 
+  /// A linha tracejada que marca a folga do topo.
+  ///
+  /// Muda de cor quando a pilha alcança essa folga. Antes de existir derrota
+  /// ela era enfeite; agora é o único aviso que o jogador tem de que a
+  /// próxima linha pode acabar com a partida.
   void _renderDangerLine(Canvas canvas, BoardViewport view) {
     const dash = 10.0;
     const gap = 6.0;
-    final y = view.rowsToPixels(dangerRows);
+    _dangerPaint.color = playfield.isInDanger
+        ? Palette.dangerLineAlert
+        : Palette.dangerLine;
+    final y = view.rowsToPixels(playfield.geometry.dangerRowCount);
     var x = 0.0;
     while (x < view.size.x) {
       final end = math.min(x + dash, view.size.x);

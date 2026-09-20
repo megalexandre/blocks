@@ -80,8 +80,9 @@ class StackFiller {
           ),
         )
         .toList();
-    // Cada eixo bloqueia no máximo duas cores, então com cinco sempre sobra
-    // alguma. Cortar o enum para quatro põe este assert em risco.
+    // Cada eixo bloqueia no máximo duas cores, então bastam cinco para
+    // sempre sobrar alguma — hoje são seis, com folga. Cortar o enum para
+    // quatro põe este assert em risco.
     assert(
       allowed.isNotEmpty,
       'nenhuma cor livre em (${row.value}, ${col.value})',

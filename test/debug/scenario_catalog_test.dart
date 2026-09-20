@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:blocos/debug/scenario_catalog.dart';
 import 'package:blocos/game/board_script.dart';
+import 'package:blocos/game/playfield.dart';
 
 void main() {
   test('todo cenário do catálogo monta sem estourar', () {
@@ -71,5 +72,65 @@ void main() {
   test('os nomes não se repetem', () {
     final names = scenarioCatalog.map((s) => s.name).toList();
     expect(names.toSet(), hasLength(names.length));
+  });
+
+  group('os cenários que sobem terminam sozinhos', () {
+    const frame = 1 / 60;
+
+    /// Roda sem jogador até a partida acabar, e devolve em quantos segundos.
+    double? timeToGameOver(Playfield playfield, {int maxSeconds = 120}) {
+      for (var f = 0; f < 60 * maxSeconds; f++) {
+        playfield.update(frame);
+        if (playfield.isOver) {
+          return f / 60;
+        }
+      }
+      return null;
+    }
+
+    test('sem a pilha segurada, ninguém joga para sempre', () {
+      // Um cenário que sobe e nunca acaba seria um cenário que não dá para
+      // usar para estudar a derrota — que é metade do catálogo hoje.
+      for (final scenario in scenarioCatalog) {
+        final playfield = scenario.build();
+        if (playfield.risePaused) {
+          continue;
+        }
+        expect(
+          timeToGameOver(playfield),
+          isNotNull,
+          reason: 'o cenário "${scenario.name}" sobe mas nunca acaba',
+        );
+      }
+    });
+
+    test('a coluna sozinha derruba a partida sem encher o tabuleiro', () {
+      // É o que o cenário existe para mostrar: perder é a linha que sai levar
+      // **alguma** coisa, não o tabuleiro estar cheio.
+      final scenario = scenarioCatalog.firstWhere(
+        (s) => s.name == 'Coluna até o teto',
+      );
+      final playfield = scenario.build();
+
+      final seconds = timeToGameOver(playfield, maxSeconds: 30);
+      expect(seconds, isNotNull);
+      expect(
+        seconds,
+        lessThan(10),
+        reason: 'um cenário de derrota tem que ser rápido de exercitar',
+      );
+
+      final top = playfield.geometry.topRow;
+      final occupied = playfield.geometry.columns
+          .where((c) => playfield.grid.blockAt(top, c) != null)
+          .length;
+      expect(
+        occupied,
+        1,
+        reason:
+            'a linha que saiu levava uma célula só — e isso bastou para '
+            'encerrar a partida',
+      );
+    });
   });
 }

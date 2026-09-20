@@ -1,11 +1,11 @@
 import 'package:flame/components.dart' hide Block;
-import 'package:flame/game.dart';
 import 'package:flutter/painting.dart';
 
 import '../dressing/board_viewport.dart';
 import '../game/model/block.dart';
 import '../game/playfield.dart';
 import '../scene/board_component.dart';
+import '../scene/game_scene.dart';
 
 /// Escreve por cima do tabuleiro o que o desenho esconde: em que linha e
 /// coluna cada célula está, o estado de cada bloco e o rastro de queda dele.
@@ -20,11 +20,16 @@ import '../scene/board_component.dart';
 /// qualquer componente que precise encostar no board calcule a área sem
 /// depender da ordem de montagem entre os dois.
 class BoardDebugOverlay extends PositionComponent
-    with HasGameReference<FlameGame> {
-  BoardDebugOverlay({required this.playfield})
-    : super(priority: 100); // por cima do tabuleiro
+    with HasGameReference<GameScene> {
+  BoardDebugOverlay() : super(priority: 100); // por cima do tabuleiro
 
-  final Playfield playfield;
+  /// Perguntado à cena a cada quadro, nunca guardado.
+  ///
+  /// Guardá-lo no construtor foi um erro que só apareceu quando a partida
+  /// passou a poder recomeçar: o botão "jogar de novo" troca o [Playfield]
+  /// inteiro, e a sobreposição continuava relatando o estado da partida
+  /// perdida — dizia FIM sobre um tabuleiro novo.
+  Playfield get playfield => game.playfield;
 
   double _cellSize = 24;
 
@@ -72,8 +77,12 @@ class BoardDebugOverlay extends PositionComponent
     _headerText.render(
       canvas,
       'chain ${playfield.chainLevel}   '
+      'vel ${playfield.speedGrowth.toStringAsFixed(2)}x   '
+      '${playfield.elapsed.toStringAsFixed(0)}s   '
       'subida ${playfield.riseOffset.toStringAsFixed(2)}'
-      '${playfield.risePaused ? " (parada)" : ""}',
+      '${playfield.risePaused ? " (parada)" : ""}'
+      '${playfield.isInDanger ? "   PERIGO" : ""}'
+      '${playfield.isOver ? "   FIM" : ""}',
       Vector2(0, -56),
     );
 

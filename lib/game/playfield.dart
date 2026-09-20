@@ -86,8 +86,42 @@ class Playfield {
   /// objetos (`board.matchResolver.chainLevel`) para chegar até aqui.
   int get chainLevel => _matches.chainLevel;
 
+  /// O jogador perdeu: a pilha empurrou bloco para fora pelo topo.
+  ///
+  /// A partir daqui [update] ignora o tempo — nada sobe, cai, combina ou
+  /// anima. É o estado final de uma partida, e quem quiser jogar de novo
+  /// constrói outro [Playfield]: recomeçar é uma partida nova, não um campo
+  /// que se limpa.
+  bool get isOver => _over;
+
+  bool _over = false;
+
+  /// A pilha alcançou a folga do topo: ainda dá para jogar, mas o próximo
+  /// descuido custa a partida.
+  ///
+  /// Mora aqui, e não em quem desenha, porque é regra: a linha tracejada é a
+  /// **representação** disto, e antes de existir a derrota ela era só um
+  /// enfeite que não queria dizer nada.
+  bool get isInDanger {
+    for (final row in geometry.dangerRows) {
+      for (final col in geometry.columns) {
+        if (_grid.blockAt(row, col) != null) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /// Segurar para subir mais rápido.
   set boosting(bool value) => _raiser.boosting = value;
+
+  /// Há quanto tempo a partida corre, em segundos.
+  double get elapsed => _raiser.elapsed;
+
+  /// Quantas vezes a velocidade inicial a pilha sobe agora. Começa em 1 e
+  /// cresce com o tempo de partida.
+  double get speedGrowth => _raiser.growth;
 
   /// Segura a pilha onde está, sem congelar o resto do jogo: blocos continuam
   /// caindo, combinando e estourando. Serve para examinar um tabuleiro sem
@@ -107,7 +141,15 @@ class Playfield {
   /// instante exato em que a pilha trava, que é coisa que o jogador sente.
   List<GameEvent> update(double dt) {
     final events = <GameEvent>[];
+    if (_over) {
+      return events;
+    }
     _raise(events.add, dt);
+    // Logo depois de subir, e não no momento de subir: é a chegada do bloco
+    // à linha do topo que encerra a partida, não a saída dele por cima.
+    if (_toppedOut(events.add)) {
+      return events;
+    }
     _gravity.update(dt, emit: events.add);
     // `isSettling` é perguntado depois de o sistema de combinação tirar da
     // grade quem terminou de estourar — é essa remoção que solta o bloco de
@@ -141,6 +183,27 @@ class Playfield {
       _filler.fillIncomingRow();
     }
     emit(RowsRisen(count: risenRows));
+  }
+
+  /// Encerra a partida se algum bloco alcançou a linha do topo, e diz se foi
+  /// o caso.
+  ///
+  /// **Chegar, não sair.** A verificação era feita no instante em que a linha
+  /// do topo ia embora — e isso é tarde demais: entre o bloco alcançar a
+  /// primeira linha e a linha ser descartada, a pilha sobe uma célula inteira,
+  /// que é o tempo do bloco deslizar para cima até desaparecer da área
+  /// visível. O jogador via peças sumindo pelo teto com o jogo ainda
+  /// correndo. Agora a partida acaba com o bloco encostado na borda de cima,
+  /// onde ele ainda é visível e o motivo é óbvio.
+  ///
+  /// Por consequência, a linha do topo deixou de ser jogável: ela é o teto.
+  bool _toppedOut(EmitEvent emit) {
+    if (_grid.rowAt(geometry.topRow).isEmpty) {
+      return false;
+    }
+    _over = true;
+    emit(const ToppedOut());
+    return true;
   }
 
   bool _isSettling() => _gravity.isSettling;

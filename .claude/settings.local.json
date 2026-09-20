@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/alex/.claude/**)",
+      "Bash(docker volume *)",
+      "Bash(xargs ls)"
+    ]
+  }
+}

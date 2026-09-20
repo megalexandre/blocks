@@ -121,6 +121,20 @@ void main() {
     });
   });
 
+  test('toda cor tem letra, nos dois sentidos', () {
+    // `describe` procura a letra da cor e estoura se não achar. Uma cor nova
+    // sem letra quebraria a leitura de volta na primeira vez que ela caísse
+    // no tabuleiro — longe daqui, e sem dizer o porquê.
+    for (final color in BlockColor.values) {
+      final letter = BoardScript.letterOf(color);
+      expect(letter, hasLength(1));
+
+      final grid = gridOf(columns: 1, visibleRows: 1);
+      BoardScript(letter).paintOn(grid);
+      expect(grid.blockAt(grid.geometry.floorRow, col(0))?.color, color);
+    }
+  });
+
   group('describe', () {
     test('ler de volta devolve o mesmo desenho', () {
       // O formato precisa dos dois sentidos: é o que permite um editor

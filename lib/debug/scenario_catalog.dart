@@ -121,6 +121,40 @@ const List<Scenario> scenarioCatalog = [
     '''),
   ),
   Scenario(
+    name: 'Coluna até o teto',
+    purpose:
+        'Uma torre solitária subindo. Quando o bloco mais alto for empurrado '
+        'para fora pelo topo, a partida acaba — basta uma célula ocupada na '
+        'linha que sai, não o tabuleiro cheio.',
+    riseRowsPerSecond: 1,
+    board: BoardScript('''
+      ......
+      ......
+      ..R...
+      ..G...
+      ..B...
+      ..R...
+      ..G...
+      ..B...
+      ..R...
+      ..G...
+      ..B...
+      ..R...
+    '''),
+  ),
+  Scenario(
+    name: 'As seis cores',
+    purpose:
+        'Uma coluna de cada cor, lado a lado. Serve para conferir se ciano e '
+        'azul se distinguem de relance, e se todas leem bem sobre a '
+        'paisagem.',
+    risePaused: true,
+    board: BoardScript('''
+      RGCPYB
+      RGCPYB
+    '''),
+  ),
+  Scenario(
     name: 'Tabuleiro vazio',
     purpose:
         'Só o piso. Para montar uma situação à mão, arrastando blocos da '

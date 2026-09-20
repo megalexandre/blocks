@@ -26,9 +26,6 @@ class BoardComponent extends PositionComponent
   static const int columns = 6;
   static const int visibleRows = 12;
 
-  /// Linhas de folga entre o topo do tabuleiro e a linha de perigo.
-  static const int dangerRows = 2;
-
   /// Elementos já carregados, entregues pela cena.
   final FactoryElements elements;
 
@@ -40,7 +37,6 @@ class BoardComponent extends PositionComponent
 
   late final _painter = BoardPainter(
     playfield: playfield,
-    dangerRows: dangerRows,
     elements: elements,
   );
 
