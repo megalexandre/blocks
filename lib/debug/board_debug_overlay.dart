@@ -137,6 +137,11 @@ class BoardDebugOverlay extends PositionComponent
     if (!block.isIdle) {
       parts.add(block.state == BlockState.matched ? 'pisca' : 'estoura');
     }
+    if (block.hoverSteps > 0) {
+      // Palavra, e não símbolo: a fonte desta sobreposição não tem o glifo de
+      // pausa, e ele saía como um retângulo vazio na tela.
+      parts.add('susp${block.hoverSteps}');
+    }
     if (block.fallOffset > 0) {
       parts.add('↓${block.fallOffset.toStringAsFixed(2)}');
     }

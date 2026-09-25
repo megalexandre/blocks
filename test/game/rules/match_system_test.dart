@@ -101,6 +101,57 @@ void main() {
       // Coluna 0 nunca recebeu reposição: fica vazia depois do vermelho sair.
       expect(grid.blockAt(row(3), col(0)), isNull);
     });
+
+    test('trinca fechada à mão durante a chain vale 1 e não vira elo', () {
+      // O jogador continua jogando enquanto a pilha resolve — é o que o
+      // tutorial do original ensina. Mas a trinca que ele fecha num canto
+      // qualquer, com blocos que ninguém derrubou, é combinação nova: ela sai
+      // valendo 1 e a chain em curso segue de onde estava.
+      final grid = emptyGrid(columns: 8, rows: 7);
+      for (var c = 0; c < 8; c++) {
+        grid.put(row(6), col(c), Block(BlockColor.purple));
+      }
+      // Esquerda: a chain de verdade. Os vermelhos fecham no 1º quadro, os
+      // azuis caem em cima do buraco e fecham o elo com o azul da coluna 3.
+      grid.put(row(5), col(0), Block(BlockColor.red));
+      grid.put(row(5), col(1), Block(BlockColor.red));
+      grid.put(row(5), col(2), Block(BlockColor.red));
+      grid.put(row(5), col(3), Block(BlockColor.blue));
+      grid.put(row(4), col(1), Block(BlockColor.blue));
+      grid.put(row(4), col(2), Block(BlockColor.blue));
+      // Direita: dois verdes, um amarelo e um verde. Nada cai aqui — a trinca
+      // nasce da troca que o teste faz no meio da resolução.
+      grid.put(row(5), col(4), Block(BlockColor.green));
+      grid.put(row(5), col(5), Block(BlockColor.green));
+      grid.put(row(5), col(6), Block(BlockColor.yellow));
+      grid.put(row(5), col(7), Block(BlockColor.green));
+
+      final system = MatchSystem(grid: grid);
+      final gravity = GravitySystem(grid: grid);
+      final cleared = <MatchCleared>[];
+      void collect(GameEvent event) {
+        if (event is MatchCleared) {
+          cleared.add(event);
+        }
+      }
+
+      // 1º quadro: só os vermelhos.
+      system.update(0.02, isSettling: () => gravity.isSettling, emit: collect);
+      expect(system.chainLevel, 1);
+      // Agora, com a chain aberta, o jogador fecha a trinca verde à mão.
+      grid.swap(grid.rowAt(row(5)), col(6), col(7));
+
+      for (var i = 0; i < 400 && cleared.length < 3; i++) {
+        gravity.update(0.02);
+        system.update(0.02, isSettling: () => gravity.isSettling, emit: collect);
+      }
+
+      expect(
+        cleared.map((e) => (e.comboSize, e.chainLevel)),
+        [(3, 1), (3, 1), (3, 2)],
+        reason: 'a trinca do meio é combinação nova; o elo seguinte é 2, não 3',
+      );
+    });
   });
 
   group('cascata do estouro', () {

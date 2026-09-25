@@ -1,6 +1,8 @@
 import '../model/block.dart';
 import '../model/block_grid.dart';
 import '../model/cell.dart';
+import '../model/column.dart';
+import '../model/row_index.dart';
 import '../color_runs.dart';
 import '../game_event.dart';
 import '../match_timings.dart';
@@ -33,9 +35,15 @@ class MatchSystem {
   int get comboSize => _comboSize;
 
   /// Nível da chain atual: 1 na primeira combinação depois da pilha ficar
-  /// ociosa, e sobe uma a cada combinação nova que aparece antes da pilha
-  /// assentar de novo — o caso em que blocos caindo de uma combinação anterior
-  /// fecham outra. Volta a 0 quando a pilha assenta ociosa.
+  /// ociosa, e sobe uma a cada combinação que **um estouro anterior causou** —
+  /// isto é, que contém pelo menos um bloco derrubado por ele
+  /// ([Block.chainLink]). Volta a 0 quando a pilha assenta ociosa.
+  ///
+  /// Não basta a combinação aparecer antes da pilha assentar, como valia
+  /// antes: o jogador continua jogando durante o estouro, e a trinca que ele
+  /// fecha com blocos que ninguém derrubou é combinação nova, não elo. Quando
+  /// ela acontece no meio de uma chain, a chain em curso segue com o nível
+  /// que tinha — a combinação avulsa é que sai valendo 1.
   int get chainLevel => _chainLevel;
 
   int _comboSize = 0;
@@ -74,17 +82,24 @@ class MatchSystem {
     required EmitEvent emit,
   }) {
     _advance(dt, emit);
-    final matchedNow = _detect();
-    if (matchedNow > 0) {
-      _comboSize = matchedNow;
-      _chainLevel = _chainActive ? _chainLevel + 1 : 1;
+    final match = _detect();
+    if (match.size > 0) {
+      _comboSize = match.size;
+      // Elo, e não combinação qualquer: a chain só sobe quando a combinação
+      // nova carrega um bloco que um estouro desta mesma chain derrubou.
+      final linked = match.linked && _chainActive;
+      final level = linked ? _chainLevel + 1 : 1;
+      if (linked || !_chainActive) {
+        _chainLevel = level;
+      }
       _chainActive = true;
-      emit(MatchCleared(comboSize: _comboSize, chainLevel: _chainLevel));
+      emit(MatchCleared(comboSize: _comboSize, chainLevel: level));
     }
     _resolving = _anyResolving();
     if (!_resolving && !isSettling()) {
       if (_chainActive) {
         emit(ChainEnded(length: _chainLevel));
+        _forgetChainLinks();
       }
       _chainActive = false;
       _comboSize = 0;
@@ -128,6 +143,7 @@ class MatchSystem {
           case BlockState.popping:
             if (block.stateTime >= block.clearAt) {
               grid.clear(row, col);
+              _markChainLinksAbove(row, col);
             }
           case BlockState.idle:
             break;
@@ -139,24 +155,56 @@ class MatchSystem {
     }
   }
 
-  /// Marca em [BlockState.matched] toda combinação nova encontrada agora, e
-  /// devolve quantos blocos entraram nela (0 se não achou nenhuma).
-  int _detect() {
+  /// Marca em [BlockState.matched] toda combinação nova encontrada agora.
+  ///
+  /// `size` é quantos blocos entraram nela (0 se não achou nenhuma), e
+  /// `linked` diz se algum deles tinha sido derrubado por um estouro anterior
+  /// — a diferença entre um elo da chain e uma combinação que só por acaso
+  /// aconteceu enquanto a pilha resolvia.
+  ({int size, bool linked}) _detect() {
     final matched = _runs.matchedCells();
     if (matched.isEmpty) {
-      return 0;
+      return (size: 0, linked: false);
     }
 
     final order = matched.toList()..sort(cascadeOrder);
     // O grupo inteiro sai quando o último terminar de encolher: a cascata é
     // só visual, e a pilha de cima espera o buraco ficar pronto por completo.
     final clearAt = (order.length - 1) * timings.stagger + timings.pop;
+    var linked = false;
     for (var i = 0; i < order.length; i++) {
-      grid.blockAt(order[i].row, order[i].col)!
+      final block = grid.blockAt(order[i].row, order[i].col)!
         ..enter(BlockState.matched)
         ..popDelay = i * timings.stagger
         ..clearAt = clearAt;
+      linked = linked || block.chainLink;
     }
-    return order.length;
+    return (size: order.length, linked: linked);
+  }
+
+  /// Marca como elo todo bloco acima de uma célula que acabou de esvaziar:
+  /// são exatamente os que vão cair por causa deste estouro.
+  ///
+  /// A coluna inteira, e não só a célula de cima — quando um buraco se abre
+  /// embaixo, tudo o que está acima dele desce, inclusive o que está separado
+  /// por um vão.
+  ///
+  /// Quem estava no mesmo grupo e por cima já saiu da grade neste quadro,
+  /// porque a varredura de [_advance] vai do topo para o piso: ninguém ganha
+  /// a marca a caminho de sumir.
+  void _markChainLinksAbove(RowIndex row, Column col) {
+    for (var above = row.above; above.value >= 0; above = above.above) {
+      grid.blockAt(above, col)?.chainLink = true;
+    }
+  }
+
+  /// Apaga as marcas quando a chain acaba. Uma varredura por chain encerrada,
+  /// e não uma por quadro ocioso: é o único instante em que a resposta muda.
+  void _forgetChainLinks() {
+    for (final row in grid.geometry.playableRows) {
+      for (final col in grid.geometry.columns) {
+        grid.blockAt(row, col)?.chainLink = false;
+      }
+    }
   }
 }

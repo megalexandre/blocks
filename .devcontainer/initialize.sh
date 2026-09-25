@@ -27,6 +27,18 @@ mkdir -p "$dir"
 rm -f "$dir/Xauthority"
 touch "$dir/Xauthority"
 
+# Qual display o host está usando agora.
+#
+# O `containerEnv` do devcontainer.json congela o DISPLAY no momento em que o
+# container é criado. Quando a sessão gráfica do host reinicia, ela costuma
+# voltar com outro número, e o container fica apontando para um display que
+# não existe mais — a janela não abre e o erro é um `cannot open display`
+# seco, que não diz o que houve.
+#
+# Este arquivo mora na mesma pasta do cookie, que é montada inteira e viva:
+# o container lê daqui e se corrige sozinho, sem precisar ser recriado.
+printf '%s' "${DISPLAY:-}" > "$dir/display"
+
 # O `sed` troca a família de cada entrada por ffff (vale para qualquer host):
 # o container tem outro hostname, e um cookie preso ao nome do host seria
 # recusado lá dentro. Sem tela ou sem xauth o cookie fica vazio, e o container

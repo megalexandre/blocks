@@ -6,11 +6,11 @@ import '../scene/game_scene.dart';
 import 'board_debug_overlay.dart';
 import 'scenario.dart';
 
-/// O cenário rodando, com a barra de ferramentas por cima.
+/// O cenário rodando, com a barra de ferramentas na borda de cima.
 ///
-/// A barra é widget Flutter num [Stack], e não um overlay do Flame: ela só
-/// precisa ficar por cima do canvas, e o sistema de overlays só valeria a
-/// pena se o menu tivesse que abrir no meio da partida.
+/// A barra é widget Flutter, e não um overlay do Flame: ela só precisa ficar
+/// fora do canvas, e o sistema de overlays só valeria a pena se o menu tivesse
+/// que abrir no meio da partida.
 class DebugGamePage extends StatefulWidget {
   const DebugGamePage({required this.scenario, super.key});
 
@@ -91,28 +91,33 @@ class _DebugGamePageState extends State<DebugGamePage> {
     return Scaffold(
       backgroundColor: Palette.background,
       body: SafeArea(
-        // Coluna, e não pilha: por cima do canvas a barra escondia o rodapé
-        // do tabuleiro, e com ele a linha que está entrando por baixo — que é
-        // justamente uma das coisas que se quer enxergar aqui.
+        // Coluna, e não pilha: por cima do canvas a barra taparia o placar,
+        // que é onde o contador de chain aparece. Fora do canvas ela não tapa
+        // nada — e o preço é a altura que ela ocupa, que sai do jogo.
+        //
+        // Por isso ela é uma linha só de ícones, e não o cartão de duas
+        // linhas com rótulo em cada botão que havia antes: cada pixel de
+        // altura daqui é um pixel a menos de tabuleiro.
+        //
+        // Na borda de **cima**, e não na de baixo: o que se olha nesta tela é
+        // a pilha subindo e a linha que entra por baixo, então a ferramenta
+        // fica no canto mais longe disso.
         child: Column(
           children: [
+            _Toolbar(
+              scenarioName: widget.scenario.name,
+              risePaused: risePaused,
+              stepping: _stepping,
+              showData: _showData,
+              onBack: () => Navigator.of(context).pop(),
+              onToggleRise: _toggleRise,
+              onToggleStepping: _toggleStepping,
+              onStep: _stepping ? _stepOnce : null,
+              onReload: _reload,
+              onToggleData: _toggleData,
+            ),
             Expanded(
               child: GameWidget(key: ValueKey(_generation), game: _scene),
-            ),
-            SizedBox(
-              width: double.infinity,
-              child: _Toolbar(
-                scenarioName: widget.scenario.name,
-                risePaused: risePaused,
-                stepping: _stepping,
-                showData: _showData,
-                onBack: () => Navigator.of(context).pop(),
-                onToggleRise: _toggleRise,
-                onToggleStepping: _toggleStepping,
-                onStep: _stepping ? _stepOnce : null,
-                onReload: _reload,
-                onToggleData: _toggleData,
-              ),
             ),
           ],
         ),
@@ -146,60 +151,64 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onReload;
   final VoidCallback onToggleData;
 
+  /// Altura da barra. Fixa e pequena de propósito: é o tanto que o jogo
+  /// perde de altura, então ela é o menor botão tocável que ainda dá para
+  /// acertar — e não cresce com o rótulo, que virou dica de passar o mouse.
+  static const double height = 34;
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: const BoxDecoration(
         color: Palette.cardBackground,
-        border: Border(top: BorderSide(color: Palette.cardBorder)),
+        border: Border(bottom: BorderSide(color: Palette.cardBorder)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            scenarioName,
-            style: const TextStyle(
-              color: Palette.textPrimary,
-              fontWeight: FontWeight.w800,
-            ),
+          _Action(icon: Icons.arrow_back, label: 'Menu', onTap: onBack),
+          _Action(
+            icon: risePaused ? Icons.play_arrow : Icons.pause,
+            label: risePaused ? 'Subir' : 'Segurar',
+            active: risePaused,
+            onTap: onToggleRise,
           ),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              _Action(icon: Icons.arrow_back, label: 'Menu', onTap: onBack),
-              _Action(
-                icon: risePaused ? Icons.play_arrow : Icons.pause,
-                label: risePaused ? 'Subir' : 'Segurar',
-                active: risePaused,
-                onTap: onToggleRise,
+          _Action(
+            icon: Icons.slow_motion_video,
+            label: 'Passo a passo',
+            active: stepping,
+            onTap: onToggleStepping,
+          ),
+          _Action(
+            icon: Icons.skip_next,
+            label: '+1 quadro',
+            onTap: onStep,
+          ),
+          _Action(
+            icon: Icons.refresh,
+            label: 'Recarregar',
+            onTap: onReload,
+          ),
+          _Action(
+            icon: Icons.grid_on,
+            label: 'Dados',
+            active: showData,
+            onTap: onToggleData,
+          ),
+          const SizedBox(width: 8),
+          // O nome fica no fim e encolhe com reticências: numa janela
+          // estreita quem some é o texto, nunca um botão.
+          Expanded(
+            child: Text(
+              scenarioName,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Palette.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
               ),
-              _Action(
-                icon: Icons.slow_motion_video,
-                label: 'Passo a passo',
-                active: stepping,
-                onTap: onToggleStepping,
-              ),
-              _Action(
-                icon: Icons.skip_next,
-                label: '+1 quadro',
-                onTap: onStep,
-              ),
-              _Action(
-                icon: Icons.refresh,
-                label: 'Recarregar',
-                onTap: onReload,
-              ),
-              _Action(
-                icon: Icons.grid_on,
-                label: 'Dados',
-                active: showData,
-                onTap: onToggleData,
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -226,30 +235,23 @@ class _Action extends StatelessWidget {
     final color = !enabled
         ? Palette.textPrimary.withValues(alpha: 0.3)
         : Palette.textPrimary;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          color: active ? Palette.playfieldBorder : Colors.transparent,
-          border: Border.all(color: Palette.cardBorder),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
+    // O rótulo virou dica: ele é o que explicava o botão, e continua a um
+    // segundo de distância, sem custar altura nenhuma à barra.
+    return Tooltip(
+      message: label,
+      waitDuration: const Duration(milliseconds: 400),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          width: 30,
+          margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            color: active ? Palette.playfieldBorder : Colors.transparent,
+            border: Border.all(color: Palette.cardBorder),
+          ),
+          child: Icon(icon, size: 16, color: color),
         ),
       ),
     );

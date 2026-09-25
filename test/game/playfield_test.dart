@@ -188,11 +188,27 @@ void main() {
             playfield.grid.blockAt(floor, c) != null &&
             playfield.grid.blockAt(floor.above, c) != null,
       );
+      final hovering = playfield.grid.blockAt(floor.above, column)!;
       playfield.grid.clear(floor, column);
-      // Dois quadros: um de 1/60 ainda não completa o passo de gravidade
-      // (0,025 s), então o primeiro só acumula tempo e o segundo é que move.
+      // Antes de cair, o bloco fica suspenso — e suspenso também não se
+      // troca, embora ele esteja parado e sem rastro nenhum.
       playfield.update(frame);
       playfield.update(frame);
+      expect(
+        playfield.grid.blockAt(floor.above, column),
+        same(hovering),
+        reason: 'a suspensão segura o bloco no lugar antes da queda',
+      );
+      expect(hovering.isIdle, isTrue);
+      expect(hovering.fallOffset, 0);
+      expect(
+        hovering.isSettled,
+        isFalse,
+        reason: 'suspenso não está assentado, e por isso não se troca',
+      );
+
+      // Agora deixa a suspensão vencer e o bloco cair de verdade.
+      runUntil(playfield, () => playfield.grid.blockAt(floor, column) != null);
 
       final falling = playfield.grid.blockAt(floor, column);
       expect(falling, isNotNull, reason: 'o bloco tinha que ter caído');
@@ -268,6 +284,62 @@ void main() {
             'as colunas começaram a cair em quadros diferentes '
             '($startedFalling) — a pilha desabou em escada',
       );
+    });
+  });
+
+  group('a chain que o jogador arma', () {
+    /// O mesmo tabuleiro sempre, para que a única diferença entre as duas
+    /// partidas do teste seja o deslize.
+    Playfield board() {
+      final playfield = seeded(20);
+      BoardScript('''
+        ..BB..
+        BYRRR.
+        GYGYGY
+      ''').paintOn(playfield.grid);
+      return playfield;
+    }
+
+    List<int> chainsOf(Playfield playfield, {bool slide = false}) {
+      final levels = <int>[];
+      void run(int frames) {
+        for (var f = 0; f < frames; f++) {
+          for (final event in playfield.update(frame)) {
+            if (event is MatchCleared) {
+              levels.add(event.chainLevel);
+            }
+          }
+        }
+      }
+
+      // Cinco quadros: os vermelhos já fecharam e ainda estão piscando.
+      run(5);
+      if (slide) {
+        // O azul sai da coluna 0 para a 1, encostando em onde os de cima vão
+        // pousar quando o buraco abrir.
+        playfield.grab((row: playfield.geometry.floorRow.above, col: col(0)));
+        playfield.dragTo(col(1));
+      }
+      run(235);
+      return levels;
+    }
+
+    test('deslizar um bloco durante o estouro fecha o elo seguinte', () {
+      // O "Slide this one over" do tutorial do original. Ele só é possível
+      // porque o bloco fica suspenso antes de cair e porque a janela da chain
+      // continua aberta enquanto isso — e só conta como elo porque o bloco
+      // que pousa carrega a marca de ter sido derrubado.
+      expect(
+        chainsOf(board(), slide: true),
+        [1, 2],
+        reason: 'o deslize tinha que transformar a queda em elo',
+      );
+    });
+
+    test('sem o deslize, os mesmos blocos caem e não fecham nada', () {
+      // O contraponto: se a chain 2 aparecesse aqui também, o teste de cima
+      // não estaria provando nada sobre a jogada do jogador.
+      expect(chainsOf(board()), [1]);
     });
   });
 

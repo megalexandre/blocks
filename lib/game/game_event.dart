@@ -28,8 +28,9 @@ final class MatchCleared extends GameEvent {
   /// Quantos blocos saíram juntos.
   final int comboSize;
 
-  /// 1 na primeira combinação depois da pilha assentar; sobe a cada
-  /// combinação que uma queda anterior encadeia.
+  /// 1 na primeira combinação depois da pilha assentar, e também em toda
+  /// combinação que o jogador fecha por conta própria; sobe só quando a
+  /// combinação contém um bloco que um estouro anterior derrubou.
   final int chainLevel;
 }
 

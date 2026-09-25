@@ -29,6 +29,12 @@
   // O som sai pelo PulseAudio do host (ou pelo pipewire-pulse, que usa o
   // mesmo socket): o container não tem placa de som, então fala com o
   // servidor de áudio da sua sessão pelo socket montado abaixo.
+  // O DISPLAY é copiado do host **uma vez**, na criação do container. Se a
+  // sessão gráfica do host reiniciar, ela volta com outro número e este valor
+  // fica apontando para um display morto. Os terminais se corrigem sozinhos
+  // (ver .devcontainer/x11-display.sh), mas o F5 do VS Code não passa por
+  // shell nenhum: lá o conserto é recriar o container, ou usar as tarefas
+  // "Run linux".
   "containerEnv": {
     "DISPLAY": "${localEnv:DISPLAY}",
     "XAUTHORITY": "/tmp/.host-x11/Xauthority",

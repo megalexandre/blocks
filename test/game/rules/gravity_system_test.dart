@@ -26,7 +26,10 @@ void main() {
       final block = grid.blockAt(row(0), col(0))!;
       // dt = 0 avança o passo zero vezes; os passos vêm de `step()`, que
       // adianta exatamente um sem deixar o rastro derreter no caminho.
-      final gravity = GravitySystem(grid: grid);
+      //
+      // Sem suspensão: o que está sendo medido aqui é o passo da queda, e a
+      // pausa que vem antes dela tem teste próprio logo abaixo.
+      final gravity = GravitySystem(grid: grid, hoverSeconds: 0);
       void step() => gravity.update(GravitySystem.defaultStepSeconds);
 
       expect(block.fallOffset, 0);
@@ -56,6 +59,109 @@ void main() {
       GravitySystem(grid: grid).update(GravitySystem.defaultStepSeconds);
       expect(grid.blockAt(row(1), col(0)), same(block));
       expect(block.fallOffset, 0);
+    });
+  });
+
+  group('GravitySystem: a suspensão antes da queda', () {
+    test('o bloco espera a suspensão inteira antes de descer a primeira linha',
+        () {
+      final grid = emptyGrid(columns: 1, rows: 4);
+      grid.put(row(3), col(0), Block(BlockColor.purple));
+      grid.put(row(0), col(0), Block(BlockColor.red));
+      final block = grid.blockAt(row(0), col(0))!;
+
+      const step = GravitySystem.defaultStepSeconds;
+      const hover = GravitySystem.defaultHoverSeconds;
+      final gravity = GravitySystem(grid: grid);
+      final steps = (hover / step).round();
+
+      for (var i = 0; i < steps; i++) {
+        gravity.update(step);
+        expect(
+          grid.blockAt(row(0), col(0)),
+          same(block),
+          reason: 'no passo $i ele ainda tinha que estar suspenso',
+        );
+      }
+      expect(block.isIdle, isTrue, reason: 'suspenso é parado, não é estouro');
+      expect(
+        block.isSettled,
+        isFalse,
+        reason: 'mas não assentado: é o que impede a troca de agarrá-lo',
+      );
+
+      gravity.update(step);
+      expect(
+        grid.blockAt(row(1), col(0)),
+        same(block),
+        reason: 'vencida a suspensão, ele desce no passo seguinte',
+      );
+    });
+
+    test('a coluna cai inteira, com uma suspensão só e não uma por bloco', () {
+      // Se cada bloco estreasse a própria suspensão ao descobrir o vão, a
+      // coluna desceria em degraus — um bloco por 0,2 s.
+      final grid = emptyGrid(columns: 1, rows: 6);
+      grid.put(row(5), col(0), Block(BlockColor.purple));
+      final top = Block(BlockColor.red);
+      final middle = Block(BlockColor.green);
+      final bottom = Block(BlockColor.blue);
+      grid.put(row(0), col(0), top);
+      grid.put(row(1), col(0), middle);
+      grid.put(row(2), col(0), bottom);
+
+      const step = GravitySystem.defaultStepSeconds;
+      final gravity = GravitySystem(grid: grid);
+      // A suspensão, mais as duas linhas que a coluna tem para descer.
+      final steps = (GravitySystem.defaultHoverSeconds / step).round() + 2;
+      for (var i = 0; i < steps; i++) {
+        gravity.update(step);
+      }
+
+      expect(grid.blockAt(row(4), col(0)), same(bottom));
+      expect(grid.blockAt(row(3), col(0)), same(middle));
+      expect(
+        grid.blockAt(row(2), col(0)),
+        same(top),
+        reason: 'os três desceram juntos: uma suspensão para a coluna toda',
+      );
+    });
+
+    test('apoio que chega durante a suspensão cancela a queda', () {
+      // O "slide this one over" do original: o bloco fica no ar tempo
+      // suficiente para o jogador enfiar outro embaixo dele.
+      final grid = emptyGrid(columns: 2, rows: 4);
+      grid.put(row(3), col(0), Block(BlockColor.purple));
+      grid.put(row(3), col(1), Block(BlockColor.purple));
+      final hanging = Block(BlockColor.red);
+      grid.put(row(1), col(0), hanging);
+      final slider = Block(BlockColor.green);
+      grid.put(row(2), col(1), slider);
+
+      const step = GravitySystem.defaultStepSeconds;
+      final gravity = GravitySystem(grid: grid);
+      gravity.update(step);
+      expect(hanging.hoverSteps, greaterThan(0), reason: 'está suspenso');
+      expect(
+        slider.isSettled,
+        isTrue,
+        reason: 'quem vai deslizar está apoiado e pode ser agarrado',
+      );
+
+      // O jogador desliza o apoio para baixo do bloco suspenso.
+      grid.swap(grid.rowAt(row(2)), col(1), col(0));
+
+      for (var i = 0; i < 40; i++) {
+        gravity.update(step);
+      }
+
+      expect(
+        grid.blockAt(row(1), col(0)),
+        same(hanging),
+        reason: 'ele não caiu: ganhou apoio antes de a suspensão vencer',
+      );
+      expect(hanging.hoverSteps, 0);
+      expect(hanging.isSettled, isTrue, reason: 'e voltou a ser trocável');
     });
   });
 

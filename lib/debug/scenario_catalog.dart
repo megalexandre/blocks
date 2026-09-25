@@ -37,10 +37,18 @@ const List<Scenario> scenarioCatalog = [
         'Duas quedas encadeadas. A chain tem que chegar a 3 antes da pilha '
         'assentar.',
     risePaused: true,
+    // Os três elos caem em colunas diferentes, e é isso que os separa no
+    // tempo. O desenho anterior soltava a segunda e a terceira trinca no
+    // mesmo passo de queda — as duas fechavam no mesmo quadro, viravam um
+    // grupo só de seis blocos, e a chain parava em 2 mostrando combo 6.
+    //
+    // Aqui: os vermelhos saem e derrubam os azuis das colunas 1 e 2, que
+    // fecham o trio azul com o azul parado da coluna 3 (elo 2). Só então o
+    // verde que estava por cima desse azul perde o apoio, desce sozinho e
+    // encosta nos dois verdes que nunca saíram do lugar (elo 3).
     board: BoardScript('''
-      ..GG..
-      .BB.G.
-      RRRBG.
+      .BBG..
+      RRRBGG
     '''),
   ),
   Scenario(
@@ -70,9 +78,11 @@ const List<Scenario> scenarioCatalog = [
   Scenario(
     name: 'Queda alta',
     purpose:
-        'Um bloco solto no topo caindo até o piso. Para ver o rastro '
+        'Um bloco solto no alto caindo até o piso. Para ver o rastro '
         'interpolar em vez de pular de linha em linha.',
     risePaused: true,
+    // Começa na linha 1, e não na 0: a linha do topo é o teto, e um bloco
+    // ali encerra a partida antes de ele chegar a cair.
     board: BoardScript('''
       B.....
       ......
@@ -84,8 +94,27 @@ const List<Scenario> scenarioCatalog = [
       ......
       ......
       ......
-      ......
       .YGPYG
+    '''),
+  ),
+  Scenario(
+    name: 'Passa reto pelo par',
+    purpose:
+        'Um azul cai rente a um par de azuis e passa por ele sem estourar: '
+        'no ar não se combina. Só fecha a trinca com o par do piso, quando '
+        'pousa.',
+    risePaused: true,
+    // O par do meio fica na linha por onde o azul passa, colado na coluna
+    // dele. Se o detector aceitasse bloco sem apoio, a trinca fecharia ali,
+    // no meio da queda, e o azul nunca chegaria ao piso.
+    board: BoardScript('''
+      B.....
+      ......
+      .BB...
+      .GY...
+      .YG...
+      .GY...
+      .BB...
     '''),
   ),
   Scenario(

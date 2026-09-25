@@ -75,3 +75,13 @@ ENV CLAUDE_CONFIG_DIR=/home/$USERNAME/.claude \
     PATH=/home/$USERNAME/.local/bin:$PATH
 RUN mkdir -p "$CLAUDE_CONFIG_DIR" \
     && curl -fsSL https://claude.ai/install.sh | bash
+
+# Conserta o DISPLAY quando a sessão gráfica do host troca de número (ver o
+# cabeçalho do script). Entra nos dois lugares porque o bash só lê `profile.d`
+# em shell de login, e o terminal do VS Code costuma abrir sem ser login —
+# sem a segunda linha, metade dos terminais continuaria com o valor velho.
+USER root
+COPY x11-display.sh /etc/profile.d/blocos-x11.sh
+RUN chmod 0644 /etc/profile.d/blocos-x11.sh \
+    && printf '\n. /etc/profile.d/blocos-x11.sh\n' >> /etc/bash.bashrc
+USER $USERNAME
