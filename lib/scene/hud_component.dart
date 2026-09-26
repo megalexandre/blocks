@@ -4,7 +4,7 @@ import 'package:flame/components.dart';
 
 import '../config/layout.dart';
 import '../dressing/hud_painter.dart';
-import 'board_component.dart';
+import 'gate_component.dart';
 import 'game_scene.dart';
 
 /// O placar, na faixa livre entre o topo da tela e o tabuleiro.
@@ -16,15 +16,15 @@ class HudComponent extends PositionComponent
     with HasGameReference<GameScene> {
   HudComponent() : super(priority: 10);
 
-  final _painter = HudPainter();
+  late final _painter = HudPainter(game.elements);
 
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
-    // A faixa vai do topo da tela até onde o tabuleiro começa.
-    final board = BoardComponent.layoutFor();
+    // Até onde a **moldura** começa, e não o tabuleiro: entre os dois há a
+    // borda do batente, e o placar desenhado ali ficava por baixo da madeira.
     position = Vector2.zero();
-    this.size = Vector2(GameLayout.width, board.position.y);
+    this.size = Vector2(GameLayout.width, GateComponent.frameRect().top);
   }
 
   @override

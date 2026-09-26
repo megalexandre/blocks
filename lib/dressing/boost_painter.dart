@@ -1,72 +1,85 @@
-import 'package:flutter/painting.dart';
+import 'dart:ui';
 
+import 'bitmap_text.dart';
+import 'factory_elements.dart';
+import 'icon_sprites.dart';
 import 'palette.dart';
+import 'ui_scale.dart';
 
-/// A faixa lateral que empurra a pilha para cima.
+/// O controle que empurra a pilha para cima, **cavado na lateral da moldura**.
 ///
-/// Duas setas e a palavra escrita de cima para baixo, numa coluna alta e
-/// estreita: é uma área fácil de acertar sem olhar, que é o que se pede de um
-/// botão usado no meio da partida.
+/// Não é um cartão apoiado sobre a moldura: é um vão aberto nela. O chanfro
+/// escuro em cima e à esquerda e claro embaixo e à direita é o que faz ler
+/// como afundado — invertido, leria como botão saltado.
+///
+/// Desenhar dentro do batente também resolve uma disputa: a borda lateral da
+/// moldura e a faixa de toque ocupam o mesmo retângulo da tela. Quem recua é o
+/// desenho; **a área de toque continua sendo a faixa inteira**, que é o que se
+/// acerta sem olhar no meio da partida.
 class BoostPainter {
-  static const _letterStyle = TextStyle(
-    color: Palette.textPrimary,
-    fontSize: 26,
-    fontWeight: FontWeight.w800,
-  );
+  BoostPainter(FactoryElements elements)
+      : _icons = elements.icons,
+        _label = elements.label;
 
-  static const _label = 'SUBIR';
+  final IconSprites _icons;
+  final BitmapText _label;
 
-  final _letters = [
-    for (var i = 0; i < _label.length; i++)
-      TextPainter(textDirection: TextDirection.ltr),
-  ];
+  static const String _word = 'SUBIR';
 
-  final _fill = Paint()..color = Palette.cardBackground;
+  /// Espessura do chanfro, em unidades do canvas.
+  static const double _bevel = 8;
+
+  final _fill = Paint()..color = Palette.insetFill;
   final _fillPressed = Paint()..color = Palette.playfieldBorder;
-  final _border = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = 3
-    ..color = Palette.cardBorder;
-  final _chevron = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = 8
-    ..strokeCap = StrokeCap.round
-    ..strokeJoin = StrokeJoin.round
-    ..color = Palette.textPrimary;
+  final _shadow = Paint()..color = Palette.insetShadow;
+  final _light = Paint()..color = Palette.insetLight;
 
   void render(Canvas canvas, Rect area, {required bool pressed}) {
-    final rounded = RRect.fromRectAndRadius(area, const Radius.circular(24));
-    canvas.drawRRect(rounded, pressed ? _fillPressed : _fill);
-    canvas.drawRRect(rounded, _border);
+    canvas.drawRect(area, pressed ? _fillPressed : _fill);
 
-    // Duas setas no alto e duas embaixo: de onde quer que o polegar esteja na
-    // coluna, há uma indicação de direção por perto.
-    for (final y in [area.top + 70.0, area.top + 130.0, area.bottom - 130.0,
-      area.bottom - 70.0]) {
-      _drawChevron(canvas, area.center.dx, y, area.width * 0.22);
-    }
-
-    final height = _letters.length * 34.0;
-    var y = area.center.dy - height / 2;
-    for (var i = 0; i < _letters.length; i++) {
-      _letters[i]
-        ..text = TextSpan(text: _label[i], style: _letterStyle)
-        ..layout();
-      _letters[i].paint(
-        canvas,
-        Offset(area.center.dx - _letters[i].width / 2, y),
+    // Pressionado, o rebaixo afunda mais: o chanfro troca de lado, e é a
+    // mesma leitura que um botão de verdade dá ao ser empurrado.
+    final alto = pressed ? _light : _shadow;
+    final baixo = pressed ? _shadow : _light;
+    canvas
+      ..drawRect(Rect.fromLTWH(area.left, area.top, area.width, _bevel), alto)
+      ..drawRect(Rect.fromLTWH(area.left, area.top, _bevel, area.height), alto)
+      ..drawRect(
+        Rect.fromLTWH(area.right - _bevel, area.top, _bevel, area.height),
+        baixo,
+      )
+      ..drawRect(
+        Rect.fromLTWH(area.left, area.bottom - _bevel, area.width, _bevel),
+        baixo,
       );
-      y += 34;
-    }
-  }
 
-  void _drawChevron(Canvas canvas, double centerX, double y, double reach) {
-    canvas.drawPath(
-      Path()
-        ..moveTo(centerX - reach, y + reach * 0.6)
-        ..lineTo(centerX, y - reach * 0.2)
-        ..lineTo(centerX + reach, y + reach * 0.6),
-      _chevron,
+    final glyph = _label.font.glyphHeight * UiScale.boostLabel;
+    final step = glyph + 6.0;
+    final wordHeight = _word.length * step - 6;
+    final iconHeight = IconSprites.height * UiScale.icon.toDouble();
+    final blockHeight = iconHeight + 20 + wordHeight;
+    var y = area.center.dy - blockHeight / 2;
+
+    _icons.render(
+      canvas,
+      GameIcon.setaCima,
+      Rect.fromLTWH(area.left, y, area.width, iconHeight),
+      scale: UiScale.icon,
+      tint: Palette.textPrimary,
     );
+    y += iconHeight + 20;
+
+    // Letra por letra, de cima para baixo: a coluna é estreita demais para a
+    // palavra deitada, e girar o canvas borraria o pixel art.
+    for (final letter in _word.split('')) {
+      _label.renderCentered(
+        canvas,
+        letter,
+        Rect.fromLTWH(area.left, y, area.width, glyph.toDouble()),
+        scale: UiScale.boostLabel,
+        tint: Palette.textPrimary,
+      );
+      y += step;
+    }
   }
 }

@@ -4,6 +4,7 @@ import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 
 import '../dressing/boost_painter.dart';
+import '../dressing/ui_scale.dart';
 import 'board_component.dart';
 import 'game_scene.dart';
 
@@ -27,11 +28,12 @@ class BoostComponent extends PositionComponent
 
   final BoostSide side;
 
-  /// Margem entre a faixa e as bordas, para ela não encostar na tela nem no
-  /// tabuleiro.
-  static const double _inset = 12;
+  /// Medidas do rebaixo cavado na lateral da moldura. Mais estreito que o
+  /// batente de 128, para sobrar madeira dos dois lados dele.
+  static const double _recessWidth = 96;
+  static const double _recessHeight = 520;
 
-  final _painter = BoostPainter();
+  late final _painter = BoostPainter(game.elements);
 
   /// Toque e arraste são contados **separados**.
   ///
@@ -107,13 +109,26 @@ class BoostComponent extends PositionComponent
     }
   }
 
+  /// Onde o rebaixo é desenhado, em coordenadas locais da faixa.
+  ///
+  /// A faixa tem a largura da margem (156) e o batente da moldura ocupa os
+  /// 128 encostados no tabuleiro — à direita na faixa da esquerda, à esquerda
+  /// na da direita. O rebaixo é centrado nesse batente, e não na faixa: ele
+  /// pertence à moldura, e a faixa é só quem recebe o toque.
+  Rect _recess() {
+    final borderStart =
+        side == BoostSide.left ? size.x - UiScale.frameBorder : 0.0;
+    return Rect.fromLTWH(
+      borderStart + (UiScale.frameBorder - _recessWidth) / 2,
+      (size.y - _recessHeight) / 2,
+      _recessWidth,
+      _recessHeight,
+    );
+  }
+
   @override
   void render(Canvas canvas) {
-    _painter.render(
-      canvas,
-      Rect.fromLTWH(_inset, _inset, size.x - _inset * 2, size.y - _inset * 2),
-      pressed: _pressed,
-    );
+    _painter.render(canvas, _recess(), pressed: _pressed);
   }
 }
 

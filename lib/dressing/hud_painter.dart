@@ -1,12 +1,22 @@
-import 'package:flutter/painting.dart';
+import 'dart:ui';
 
+import 'bitmap_text.dart';
+import 'factory_elements.dart';
 import 'palette.dart';
+import 'ui_scale.dart';
 
-/// O placar, na faixa acima do tabuleiro.
+/// O placar, na faixa acima da moldura.
 ///
-/// Só desenha: recebe os números prontos e não pergunta nada ao jogo. Quem
-/// lê o jogo é o componente da cena, uma vez por quadro.
+/// Só desenha: recebe os números prontos e não pergunta nada ao jogo. Quem lê
+/// o jogo é o componente da cena, uma vez por quadro.
 class HudPainter {
+  HudPainter(FactoryElements elements)
+      : _headline = elements.headline,
+        _label = elements.label;
+
+  final BitmapText _headline;
+  final BitmapText _label;
+
   /// A partir de quantos níveis a chain aparece.
   ///
   /// Uma combinação simples é chain 1, e anunciar isso seria anunciar toda
@@ -14,74 +24,76 @@ class HudPainter {
   /// encadeou outra combinação. A regra vem do HUD antigo e sobreviveu a ele.
   static const int minChainToShow = 2;
 
-  static const _scoreStyle = TextStyle(
-    color: Palette.textPrimary,
-    fontSize: 44,
-    fontWeight: FontWeight.w800,
-  );
-  static const _labelStyle = TextStyle(
-    color: Palette.textSecondary,
-    fontSize: 20,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 2,
-  );
-  static const _chainStyle = TextStyle(
-    color: Palette.chain,
-    fontSize: 30,
-    fontWeight: FontWeight.w800,
-  );
+  /// Margem lateral, para o número não encostar na borda da tela.
+  static const double _margin = 70;
 
-  final _score = TextPainter(textDirection: TextDirection.ltr);
-  final _label = TextPainter(textDirection: TextDirection.ltr);
-  final _chain = TextPainter(textDirection: TextDirection.ltr);
-
-  /// Desenha dentro de [band] — a faixa livre acima do tabuleiro, em
+  /// Desenha dentro de [band] — a faixa livre acima da moldura, em
   /// coordenadas locais de quem chama.
+  ///
+  /// **Sem separador de milhar, e "CHAIN X2" com a letra X.** A fonte de
+  /// manchete do pacote tem só A–Z e 0–9: não existe ponto nem sinal de
+  /// vezes nela. A alternativa era escrever o placar na fonte pequena, que
+  /// tem os dois — mas o placar é a manchete da tela, e manchete é o que essa
+  /// fonte existe para ser.
   void render(
     Canvas canvas,
     Rect band, {
     required int score,
     required int chainLevel,
   }) {
-    _label
-      ..text = const TextSpan(text: 'PONTOS', style: _labelStyle)
-      ..layout();
-    _score
-      ..text = TextSpan(text: _format(score), style: _scoreStyle)
-      ..layout();
-
-    final centerX = band.center.dx;
-    final blockHeight = _label.height + 4 + _score.height;
+    final labelHeight =
+        (_label.font.glyphHeight * UiScale.label).toDouble();
+    final scoreHeight =
+        (_headline.font.glyphHeight * UiScale.headline).toDouble();
+    final blockHeight = labelHeight + 8 + scoreHeight;
     final top = band.center.dy - blockHeight / 2;
 
-    _label.paint(canvas, Offset(centerX - _label.width / 2, top));
-    _score.paint(
+    final esquerda = Rect.fromLTWH(
+      band.left + _margin,
+      top,
+      band.width / 2 - _margin,
+      labelHeight,
+    );
+    _label.render(
       canvas,
-      Offset(centerX - _score.width / 2, top + _label.height + 4),
+      'PONTOS',
+      esquerda.topLeft,
+      scale: UiScale.label,
+      tint: Palette.textSecondary,
+    );
+    _headline.render(
+      canvas,
+      '$score',
+      Offset(esquerda.left, top + labelHeight + 8),
+      scale: UiScale.headline,
     );
 
     if (chainLevel < minChainToShow) {
       return;
     }
-    _chain
-      ..text = TextSpan(text: 'CHAIN ×$chainLevel', style: _chainStyle)
-      ..layout();
-    _chain.paint(
-      canvas,
-      Offset(band.right - _chain.width - 24, band.center.dy - _chain.height / 2),
+    final direita = Rect.fromLTWH(
+      band.center.dx,
+      top,
+      band.width / 2 - _margin,
+      labelHeight,
     );
-  }
-
-  /// Separa os milhares com ponto: 12400 vira 12.400.
-  static String _format(int value) {
-    final digits = value.toString();
-    final out = StringBuffer();
-    for (var i = 0; i < digits.length; i++) {
-      if (i > 0 && (digits.length - i) % 3 == 0) {
-        out.write('.');
-      }
-      out.write(digits[i]);
-    }
-    return out.toString();
+    _label.renderRight(
+      canvas,
+      'CHAIN',
+      direita,
+      scale: UiScale.label,
+      tint: Palette.chain,
+    );
+    _headline.renderRight(
+      canvas,
+      'X$chainLevel',
+      Rect.fromLTWH(
+        direita.left,
+        top + labelHeight + 8,
+        direita.width,
+        scoreHeight,
+      ),
+      scale: UiScale.headline,
+    );
   }
 }

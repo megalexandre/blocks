@@ -61,6 +61,11 @@ flutter:
     - assets/images/selector/
     - assets/images/blocks/
     - assets/images/scenario/
+    # As folhas compostas por tool/build_ui_sheets.sh. A pasta de origem,
+    # assets/images/adventures/, fica de fora: declarar um diretório não
+    # inclui os subdiretórios dele, então os 344 arquivos do pacote ficam no
+    # repositório como fonte sem entrar no bundle.
+    - assets/images/ui/
     - assets/sounds/
 
   # An image asset can refer to one or more resolution-specific "variants", see

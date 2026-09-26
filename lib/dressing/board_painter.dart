@@ -3,7 +3,6 @@ import 'dart:ui';
 
 
 import 'palette.dart';
-import 'scenario_background.dart';
 import '../game/model/block.dart';
 import '../game/model/column.dart';
 import '../game/playfield.dart';
@@ -17,9 +16,9 @@ import 'selector.dart';
 /// quem cuida de tempo, toque e geometria é o `BoardComponent`, que a cada
 /// quadro entrega aqui a medida da célula e onde a pilha está.
 class BoardPainter {
-  BoardPainter({required this.playfield, required FactoryElements elements}) : _blocks = elements.blocks,
-       _selector = elements.selector,
-       _scenario = elements.scenario;
+  BoardPainter({required this.playfield, required FactoryElements elements})
+      : _blocks = elements.blocks,
+        _selector = elements.selector;
 
   /// Lido, nunca escrito: o pintor pergunta ao jogo onde está cada coisa.
   final Playfield playfield;
@@ -34,12 +33,7 @@ class BoardPainter {
 
   final BlockSprites _blocks;
   final Selector _selector;
-  final ScenarioBackground _scenario;
 
-  final _panelBorderPaint = Paint()
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = 2
-    ..color = Palette.playfieldBorder;
   final _overlayPaint = Paint()..isAntiAlias = true;
   final _dangerPaint = Paint()
     ..strokeWidth = 2
@@ -49,25 +43,24 @@ class BoardPainter {
   /// Desenha o quadro. Todas as medidas vêm em [view] — o pintor não guarda
   /// nenhuma delas entre um quadro e outro.
   void render(Canvas canvas, BoardViewport view) {
-    final panel = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, view.size.x, view.size.y),
-      Radius.circular(view.cellSize * 0.2),
-    );
+    // Recorte reto, e não arredondado: a moldura do pacote encosta nas quatro
+    // bordas do vão, então o canto arredondado que o painel tinha nunca
+    // apareceria — e arredondar aqui cortaria o bloco da quina.
+    //
+    // A paisagem saiu daqui e virou o `ScenarioComponent`. Enquanto ela era
+    // desenhada depois deste recorte, ela não tinha como passar dos 768×1536,
+    // e o que se quer agora é ela correndo por baixo do batente.
+    final panel = Rect.fromLTWH(0, 0, view.size.x, view.size.y);
     canvas.save();
-    canvas.clipRRect(panel);
-    // A paisagem entra recortada pelo painel, e não desenhada antes dele:
-    // assim ela ganha os cantos arredondados do tabuleiro de graça, em vez
-    // de aparecer quadrada por baixo das bordas.
-    _scenario.render(canvas, panel.outerRect);
+    canvas.clipRect(panel);
     _renderBlocks(canvas, view);
     _renderSwapAnimation(canvas, view);
     _renderCursor(canvas, view);
     canvas.restore();
 
     if (playfield.isOver) {
-      canvas.drawRRect(panel, _veilPaint);
+      canvas.drawRect(panel, _veilPaint);
     }
-    canvas.drawRRect(panel, _panelBorderPaint);
     _renderDangerLine(canvas, view);
   }
 
