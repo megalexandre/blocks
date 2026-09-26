@@ -130,6 +130,12 @@ class Playfield {
 
   set risePaused(bool value) => _raiser.paused = value;
 
+  /// Deixa um gesto só arrastar o bloco por várias casas. Desligado no jogo;
+  /// existe para os cenários de desenvolvimento, como [risePaused].
+  bool get continuousDrag => _swaps.continuousDrag;
+
+  set continuousDrag(bool value) => _swaps.continuousDrag = value;
+
   /// Um quadro inteiro. Devolve o que aconteceu nele, em ordem.
   ///
   /// A ordem é a regra: **subir → cair → combinar → recalcular o

@@ -1,3 +1,4 @@
+import 'model/cell.dart';
 import 'model/column.dart';
 
 /// O que aconteceu num quadro.
@@ -23,7 +24,11 @@ sealed class GameEvent {
 /// compilava e passava calado, e o placar contava chain como combo pelo
 /// resto da partida sem ninguém notar.
 final class MatchCleared extends GameEvent {
-  const MatchCleared({required this.comboSize, required this.chainLevel});
+  const MatchCleared({
+    required this.comboSize,
+    required this.chainLevel,
+    required this.at,
+  });
 
   /// Quantos blocos saíram juntos.
   final int comboSize;
@@ -32,6 +37,16 @@ final class MatchCleared extends GameEvent {
   /// combinação que o jogador fecha por conta própria; sobe só quando a
   /// combinação contém um bloco que um estouro anterior derrubou.
   final int chainLevel;
+
+  /// Onde ela aconteceu: a célula **do meio** do grupo, na ordem da cascata —
+  /// a do meio da fileira numa combinação horizontal, a do meio da pilha numa
+  /// vertical. É por ela que o selo do multiplicador sabe onde nascer.
+  ///
+  /// Posição **visual**, e por isso só vale no quadro do evento: a linha muda
+  /// de significado quando a pilha sobe. Quem for segurar isso por mais de um
+  /// quadro converte para pixel na hora em que o evento chega — é o que o
+  /// `BoardComponent` faz ao soltar o selo.
+  final Cell at;
 }
 
 /// A pilha assentou e a chain que estava em curso terminou com este tamanho.

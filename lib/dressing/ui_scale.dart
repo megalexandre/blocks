@@ -25,7 +25,17 @@ abstract final class UiScale {
   /// Lado da borda da moldura, em unidades do canvas.
   static const double frameBorder = 32.0 * panel;
 
-  /// Fonte grande em manchete — título, placar.
+  /// Painel de botão. Menor que o da moldura porque o quadro de um botão não
+  /// é o quadro de uma janela: em escala 4 os dois cantos já somam 256, e um
+  /// botão de 210 de altura não caberia dentro do próprio contorno — foi
+  /// exatamente o que o `assert` do `NineSlice` apontou na primeira vez que
+  /// este menu subiu.
+  static const int button = 2;
+
+  /// A fonte grande no nome do jogo, que é a maior coisa escrita em tela.
+  static const int title = 12;
+
+  /// Fonte grande em manchete — placar, rótulo de botão.
   static const int headline = 7;
 
   /// Fonte pequena em rótulo, acima do número que ela nomeia. Bem menor que a
@@ -44,6 +54,13 @@ abstract final class UiScale {
   /// borda inteira serve. Invadindo a borda toda, a porta fechada tapava a
   /// madeira inteira e só sobrava o friso de metal.
   static const double doorOverlap = 24;
+
+  /// O número do selo do multiplicador, na fonte pequena, saltando sobre o
+  /// tabuleiro. Escolhido pela célula: em 8, "×2" dá 88 unidades de largura e
+  /// 48 de altura, que com a folga do selo fecha 120×80 dentro de uma célula
+  /// de 128 — grande o bastante para se ler de relance, pequeno o bastante
+  /// para não tapar a jogada.
+  static const int chainBadge = 8;
 
   /// Ícones de 8×6.
   static const int icon = 7;

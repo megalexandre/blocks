@@ -5,11 +5,46 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 
 import '../game/game_event.dart';
 
+/// Cada som do jogo e o arquivo dele.
+///
+/// Enum e não um punhado de constantes soltas: o carregamento percorre os
+/// valores, então um som novo é uma linha aqui e nada mais — e nenhum fica
+/// para trás por esquecimento.
+enum GameSound {
+  /// A contagem regressiva, tocada **antes** de a partida começar.
+  ///
+  /// É a única cuja duração o jogo precisa conhecer: a pilha só é solta
+  /// quando ela termina. Uma contagem que toca depois do início não conta
+  /// nada.
+  matchStart('inicio_partida.mp3', seconds: 3.87),
+
+  /// Os blocos começaram a sumir — só quando o grupo é grande o bastante
+  /// para valer anúncio.
+  pop('blocos_sumindo.mp3', seconds: 1.07),
+
+  /// Uma combinação de seis ou mais.
+  comboLarge('ao_finalizar_comobo_6_ou_maior.mp3', seconds: 2.27);
+
+  const GameSound(this.fileName, {required this.seconds});
+
+  final String fileName;
+
+  /// Quanto o arquivo dura, lido do cabeçalho do MP3.
+  ///
+  /// Aqui, e não perguntado ao motor de áudio, porque o jogo precisa do número
+  /// mesmo quando o som **não** tocou: num aparelho mudo a contagem regressiva
+  /// continua valendo como espera, e o início da partida não pode depender de
+  /// existir alto-falante.
+  final double seconds;
+
+  String get assetPath => 'assets/game_sound/$fileName';
+}
+
 /// Os sons do jogo: ouve os eventos do quadro e toca o que cada um pede.
 ///
 /// Vestimenta, como o pintor: lê o que aconteceu e nunca mexe no jogo. Por
-/// isso reage a eventos e não a estado — o jogo avisa "blocos pousaram" uma
-/// vez, no quadro certo, e aqui só se decide o que isso soa.
+/// isso reage a eventos e não a estado — o jogo avisa "os blocos começaram a
+/// sumir" uma vez, no quadro certo, e aqui só se decide o que isso soa.
 ///
 /// **O jogo nunca espera o áudio.** O motor carrega em paralelo e, até ficar
 /// pronto, os sons simplesmente não tocam. A alternativa — esperar o motor
@@ -30,29 +65,47 @@ class GameSounds {
   ///
   /// Chamado na abertura do aplicativo, e não no primeiro quadro de uma
   /// partida: ligar o motor leva um tempo — mais ainda quando a primeira
-  /// tentativa de backend falha — e o primeiro impacto pode acontecer menos
-  /// de meio segundo depois de a partida começar. Sem isto, o som existe mas
-  /// o primeiro não sai.
+  /// tentativa de backend falha — e o primeiro som pode acontecer menos de
+  /// meio segundo depois de a partida começar. Sem isto, o som existe mas o
+  /// primeiro não sai.
   static void warmUp() => instance;
 
-  static const _impactAsset = 'assets/sounds/block_impact.mp3';
-  static const _popAsset = 'assets/sounds/pluzze_solved.mp3';
+  /// A partir de quantos blocos a combinação faz algum barulho.
+  ///
+  /// **Abaixo disso, silêncio.** Um trio é a jogada comum, e o jogador faz
+  /// dezenas por partida — anunciar todos é não anunciar nada, e ainda cansa.
+  static const int audibleCombo = 4;
 
-  AudioSource? _impact;
-  AudioSource? _pop;
+  /// E a partir de quantos ela ganha fanfarra.
+  ///
+  /// Bem acima do audível de propósito: fanfarra é música, e música em jogada
+  /// de quatro ou cinco blocos — que acontece o tempo todo — vira ruído. Entre
+  /// um corte e outro a combinação se anuncia só pelo estouro.
+  static const int fanfareCombo = 6;
+
+  final Map<GameSound, AudioSource> _sources = {};
 
   void handle(GameEvent event) {
     switch (event) {
-      case BlocksLanded():
-        _play(_impact);
-      case PopStarted():
-        _play(_pop);
+      // `count` é o tamanho do grupo que entrou no estouro, que para uma
+      // combinação só é o próprio combo — então o mesmo corte serve aqui sem
+      // precisar carregar o tamanho de um evento para o outro.
+      case PopStarted(:final count) when count >= audibleCombo:
+        play(GameSound.pop);
+      case MatchCleared(:final comboSize) when comboSize >= fanfareCombo:
+        play(GameSound.comboLarge);
       default:
         break;
     }
   }
 
-  void _play(AudioSource? source) {
+  /// Toca um som direto.
+  ///
+  /// Existe para o que **não é evento do jogo**: a partida começando é a cena
+  /// abrindo a porta, e a camada de regra não sabe que existe porta nenhuma.
+  /// Tudo que o jogo sabe anunciar continua entrando por [handle].
+  void play(GameSound sound) {
+    final source = _sources[sound];
     if (source == null) {
       return;
     }
@@ -67,8 +120,12 @@ class GameSounds {
     // Carregados separados do motor: se o motor subiu e um arquivo não
     // carregou, isso é erro de verdade (caminho errado, asset fora do
     // pubspec), e a mensagem precisa dizer qual.
-    _impact = await _loadAsset(soloud, _impactAsset);
-    _pop = await _loadAsset(soloud, _popAsset);
+    for (final sound in GameSound.values) {
+      final source = await _loadAsset(soloud, sound.assetPath);
+      if (source != null) {
+        _sources[sound] = source;
+      }
+    }
   }
 
   /// Liga o motor de áudio, e diz se conseguiu.

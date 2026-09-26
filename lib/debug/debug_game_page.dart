@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../dressing/palette.dart';
 import '../scene/game_scene.dart';
+import '../scene/routes.dart';
 import 'board_debug_overlay.dart';
 import 'scenario.dart';
 
@@ -33,7 +34,13 @@ class _DebugGamePageState extends State<DebugGamePage> {
   /// Entrega a **receita** do cenário, e não um jogo pronto: assim o botão
   /// "jogar de novo" do fim de partida remonta este mesmo cenário, em vez de
   /// cair numa partida normal.
-  GameScene _build() => GameScene(createPlayfield: widget.scenario.build);
+  /// Passa direto do carregamento para a partida: o menu do jogo não interessa
+  /// aqui — quem escolhe o que rodar é o menu de cenários, que já ficou para
+  /// trás quando esta tela abriu.
+  GameScene _build() => GameScene(
+        createPlayfield: widget.scenario.build,
+        afterLoading: Routes.match,
+      );
 
   /// Monta o cenário de novo, do quadro zero.
   ///
@@ -117,7 +124,12 @@ class _DebugGamePageState extends State<DebugGamePage> {
               onToggleData: _toggleData,
             ),
             Expanded(
-              child: GameWidget(key: ValueKey(_generation), game: _scene),
+              child: GameWidget(
+                key: ValueKey(_generation),
+                game: _scene,
+                loadingBuilder: (_) =>
+                    const ColoredBox(color: Palette.background),
+              ),
             ),
           ],
         ),

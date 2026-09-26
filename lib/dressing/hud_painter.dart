@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'bitmap_text.dart';
+import 'chain_badge_painter.dart';
 import 'factory_elements.dart';
 import 'palette.dart';
 import 'ui_scale.dart';
@@ -16,13 +17,6 @@ class HudPainter {
 
   final BitmapText _headline;
   final BitmapText _label;
-
-  /// A partir de quantos níveis a chain aparece.
-  ///
-  /// Uma combinação simples é chain 1, e anunciar isso seria anunciar toda
-  /// jogada. Chain só é notícia a partir de 2, quando uma queda de fato
-  /// encadeou outra combinação. A regra vem do HUD antigo e sobreviveu a ele.
-  static const int minChainToShow = 2;
 
   /// Margem lateral, para o número não encostar na borda da tela.
   static const double _margin = 70;
@@ -68,7 +62,10 @@ class HudPainter {
       scale: UiScale.headline,
     );
 
-    if (chainLevel < minChainToShow) {
+    // O mesmo corte do selo que salta no tabuleiro, lido de lá: é o mesmo
+    // número anunciado em dois lugares, e duas cópias da regra são duas que um
+    // dia discordam.
+    if (chainLevel < ChainBadgePainter.minLevel) {
       return;
     }
     final direita = Rect.fromLTWH(

@@ -5,14 +5,17 @@ import 'package:flame/components.dart' hide Block;
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 
+import '../game/game_event.dart';
 import '../game/model/cell.dart';
 import '../game/model/column.dart';
 import '../game/playfield.dart';
 import '../dressing/board_painter.dart';
 import '../dressing/board_viewport.dart';
+import '../dressing/chain_badge_painter.dart';
 import '../dressing/factory_elements.dart';
 import '../dressing/game_sounds.dart';
 import '../config/layout.dart';
+import 'chain_badge_component.dart';
 
 /// O tabuleiro na tela: **geometria em pixel, toque e pintura**.
 ///
@@ -39,6 +42,10 @@ class BoardComponent extends PositionComponent
     playfield: playfield,
     elements: elements,
   );
+
+  /// Um pintor para todos os selos: o que muda de um selo para o outro é o
+  /// número e o retângulo, e os dois chegam na chamada.
+  late final _badges = ChainBadgePainter(elements);
 
   /// Geometria do board: célula, tamanho e posição. A largura vem do vão da
   /// porta na arte do gate ([GameLayout.boardVoidWidth]) — o board precisa
@@ -73,8 +80,50 @@ class BoardComponent extends PositionComponent
     // por causa da tela e do alto-falante.
     for (final event in playfield.update(dt)) {
       GameSounds.instance.handle(event);
+      if (event case MatchCleared(:final chainLevel, :final at)
+          when chainLevel >= ChainBadgePainter.minLevel) {
+        _showChainBadge(chainLevel, at);
+      }
     }
   }
+
+  /// Solta o selo do multiplicador rente ao grupo que acabou de fechar.
+  ///
+  /// A conversão para pixel é feita **aqui, no quadro do evento**: a linha que
+  /// veio nele é posição visual, e ela muda de significado na próxima subida
+  /// da pilha — um selo que guardasse a linha ficaria apontando para outro
+  /// lugar do tabuleiro no meio do próprio voo. Em pixel ele fica onde a
+  /// combinação foi, que é o que o jogador viu.
+  void _showChainBadge(int level, Cell at) {
+    final badge = ChainBadgePainter.sizeFor(level);
+    final center = Vector2(
+      (at.col.value + 0.5) * _cellSize,
+      (at.row.value + 0.5 - playfield.riseOffset) * _cellSize,
+    );
+    add(
+      ChainBadgeComponent(
+        level: level,
+        painter: _badges,
+        position: _insideBoard(center, badge),
+        size: Vector2(badge.width, badge.height),
+      ),
+    );
+  }
+
+  /// Puxa o selo para dentro do tabuleiro. Numa combinação encostada na borda
+  /// ele nasceria metade fora, e fora do tabuleiro quem manda no pixel é o
+  /// batente da moldura — o selo sairia cortado pela madeira.
+  Vector2 _insideBoard(Vector2 center, Size badge) => Vector2(
+    _within(center.x, badge.width, size.x),
+    _within(center.y, badge.height, size.y),
+  );
+
+  /// Um eixo do encaixe. Quando o selo é **maior** que o espaço, ele fica
+  /// centrado em vez de estourar: `clamp` recusa um limite de baixo maior que
+  /// o de cima, e o espaço aqui pode ser zero — um quadro antes da primeira
+  /// medida, o componente ainda não tem tamanho nenhum.
+  static double _within(double center, double badge, double space) =>
+      space < badge ? space / 2 : center.clamp(badge / 2, space - badge / 2);
 
   @override
   void onDragStart(DragStartEvent event) {

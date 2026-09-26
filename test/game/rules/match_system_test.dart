@@ -194,6 +194,63 @@ void main() {
       }
     });
   });
+
+  group('onde a combinação aconteceu', () {
+    // O selo do multiplicador nasce nessa célula. Errá-la não muda combo,
+    // chain nem placar: só faz o "×2" aparecer longe de onde o jogador olhou.
+    MatchCleared firstMatch(BlockGrid grid) {
+      final cleared = <MatchCleared>[];
+      MatchSystem(grid: grid).update(
+        0,
+        isSettling: () => false,
+        emit: (event) {
+          if (event is MatchCleared) {
+            cleared.add(event);
+          }
+        },
+      );
+      expect(cleared, hasLength(1));
+      return cleared.single;
+    }
+
+    test('trio horizontal aponta para o bloco do meio da fileira', () {
+      final grid = emptyGrid(columns: 5, rows: 5);
+      for (var c = 0; c < 5; c++) {
+        grid.put(row(4), col(c), Block(BlockColor.purple));
+      }
+      // Vermelhos nas colunas 1, 2 e 3; as pontas ficam de outra cor.
+      grid.put(row(3), col(0), Block(BlockColor.green));
+      for (var c = 1; c <= 3; c++) {
+        grid.put(row(3), col(c), Block(BlockColor.red));
+      }
+      grid.put(row(3), col(4), Block(BlockColor.green));
+
+      expect(firstMatch(grid).at, (row: row(3), col: col(2)));
+    });
+
+    test('trio vertical aponta para o bloco do meio da pilha', () {
+      final grid = emptyGrid(columns: 2, rows: 6);
+      grid.put(row(5), col(0), Block(BlockColor.purple));
+      grid.put(row(5), col(1), Block(BlockColor.purple));
+      for (var r = 2; r <= 4; r++) {
+        grid.put(row(r), col(0), Block(BlockColor.red));
+      }
+
+      expect(firstMatch(grid).at, (row: row(3), col: col(0)));
+    });
+
+    test('fileira de quatro aponta para a primeira célula depois do meio', () {
+      // Grupo de tamanho par não tem meio exato. Sai a de índice n ~/ 2 na
+      // ordem da cascata, que é a terceira das quatro — e não uma ponta.
+      final grid = emptyGrid(columns: 4, rows: 5);
+      for (var c = 0; c < 4; c++) {
+        grid.put(row(4), col(c), Block(BlockColor.purple));
+        grid.put(row(3), col(c), Block(BlockColor.red));
+      }
+
+      expect(firstMatch(grid).at, (row: row(3), col: col(2)));
+    });
+  });
 }
 
 void _stepUntilIdle(BlockGrid grid, MatchSystem system, {int maxSteps = 400}) {

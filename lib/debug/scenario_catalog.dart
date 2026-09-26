@@ -52,6 +52,19 @@ const List<Scenario> scenarioCatalog = [
     '''),
   ),
   Scenario(
+    name: 'Arrastar a linha inteira',
+    purpose:
+        'Um arraste só carrega o bloco de ponta a ponta, em vez de trocar uma '
+        'casa e parar. Seis cores distintas em duas linhas: nada combina, '
+        'então dá para ver a linha se reorganizando enquanto o dedo anda.',
+    risePaused: true,
+    continuousDrag: true,
+    board: BoardScript('''
+      YCPRGB
+      RGBYCP
+    '''),
+  ),
+  Scenario(
     name: 'Combo 5 em L',
     purpose:
         'Trio horizontal cruzando com trio vertical: uma combinação só, de '

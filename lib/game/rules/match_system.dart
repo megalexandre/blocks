@@ -83,7 +83,7 @@ class MatchSystem {
   }) {
     _advance(dt, emit);
     final match = _detect();
-    if (match.size > 0) {
+    if (match != null) {
       _comboSize = match.size;
       // Elo, e não combinação qualquer: a chain só sobe quando a combinação
       // nova carrega um bloco que um estouro desta mesma chain derrubou.
@@ -93,7 +93,13 @@ class MatchSystem {
         _chainLevel = level;
       }
       _chainActive = true;
-      emit(MatchCleared(comboSize: _comboSize, chainLevel: level));
+      emit(
+        MatchCleared(
+          comboSize: _comboSize,
+          chainLevel: level,
+          at: match.middle,
+        ),
+      );
     }
     _resolving = _anyResolving();
     if (!_resolving && !isSettling()) {
@@ -155,16 +161,23 @@ class MatchSystem {
     }
   }
 
-  /// Marca em [BlockState.matched] toda combinação nova encontrada agora.
+  /// Marca em [BlockState.matched] toda combinação nova encontrada agora, ou
+  /// devolve nulo quando não achou nenhuma.
   ///
-  /// `size` é quantos blocos entraram nela (0 se não achou nenhuma), e
-  /// `linked` diz se algum deles tinha sido derrubado por um estouro anterior
-  /// — a diferença entre um elo da chain e uma combinação que só por acaso
-  /// aconteceu enquanto a pilha resolvia.
-  ({int size, bool linked}) _detect() {
+  /// `size` é quantos blocos entraram nela, `linked` diz se algum deles tinha
+  /// sido derrubado por um estouro anterior — a diferença entre um elo da
+  /// chain e uma combinação que só por acaso aconteceu enquanto a pilha
+  /// resolvia —, e `middle` é a célula do meio do grupo, para quem precisa
+  /// apontar para onde a combinação aconteceu.
+  ///
+  /// Nulo, e não um `size: 0`: com o registro sempre preenchido, `middle`
+  /// precisaria de uma célula inventada para o caso em que não houve
+  /// combinação nenhuma — e célula inventada é coordenada que um dia alguém
+  /// usa.
+  ({int size, bool linked, Cell middle})? _detect() {
     final matched = _runs.matchedCells();
     if (matched.isEmpty) {
-      return (size: 0, linked: false);
+      return null;
     }
 
     final order = matched.toList()..sort(cascadeOrder);
@@ -179,7 +192,15 @@ class MatchSystem {
         ..clearAt = clearAt;
       linked = linked || block.chainLink;
     }
-    return (size: order.length, linked: linked);
+    // O meio da ordem da cascata, que é ordenada por coluna e de baixo para
+    // cima: numa fileira horizontal cai no bloco do meio, numa pilha vertical
+    // no do meio da pilha. Em forma de L cai perto da dobra, que é onde o
+    // grupo tem mais peso visual.
+    return (
+      size: order.length,
+      linked: linked,
+      middle: order[order.length ~/ 2],
+    );
   }
 
   /// Marca como elo todo bloco acima de uma célula que acabou de esvaziar:

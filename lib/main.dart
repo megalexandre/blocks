@@ -33,7 +33,13 @@ class _BlocosAppState extends State<BlocosApp> {
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         backgroundColor: Palette.background,
-        body: GameWidget(game: _game),
+        body: GameWidget(
+          game: _game,
+          // O Flame desenha um quadro vazio enquanto o `onLoad` da cena roda.
+          // Sem isto ele sai chapado, e o primeiro quadro do jogo é um
+          // retângulo sem nada.
+          loadingBuilder: (_) => const ColoredBox(color: Palette.background),
+        ),
       ),
     );
   }

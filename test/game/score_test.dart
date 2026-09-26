@@ -1,16 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:blocos/game/game_event.dart';
+import 'package:blocos/game/model/cell.dart';
+import 'package:blocos/game/model/column.dart';
+import 'package:blocos/game/model/row_index.dart';
 import 'package:blocos/game/score.dart';
+
+/// Onde a combinação aconteceu não interessa ao placar; ele só precisa que o
+/// evento seja montável.
+const Cell anywhere = (row: RowIndex(5), col: Column(2));
 
 void main() {
   test('combo maior e chain maior valem mais pontos', () {
     final score = Score();
 
-    score.handle(const MatchCleared(comboSize: 3, chainLevel: 1));
+    score.handle(
+      const MatchCleared(comboSize: 3, chainLevel: 1, at: anywhere),
+    );
     expect(score.total, 3 * Score.pointsPerBlock);
 
-    score.handle(const MatchCleared(comboSize: 4, chainLevel: 2));
+    score.handle(
+      const MatchCleared(comboSize: 4, chainLevel: 2, at: anywhere),
+    );
     expect(score.total, 3 * Score.pointsPerBlock + 4 * Score.pointsPerBlock * 2);
   });
 

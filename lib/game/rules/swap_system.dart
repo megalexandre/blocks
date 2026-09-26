@@ -12,6 +12,17 @@ class SwapSystem {
 
   final BlockGrid grid;
 
+  /// Um gesto pode trocar mais de uma vez, carregando o bloco pego pela linha.
+  ///
+  /// **Desligado no jogo.** É controle de desenvolvimento, ligado só pelos
+  /// cenários do `main_dev.dart` — do mesmo jeito que `risePaused` segura a
+  /// pilha de fora. Serve para arrastar um bloco de ponta a ponta e olhar a
+  /// linha se reorganizando, sem soltar e tocar seis vezes.
+  ///
+  /// Ligado, muda o jogo de verdade: arrastar passa a ser uma rotação da
+  /// linha, e não uma troca. É por isso que não é padrão.
+  bool continuousDrag = false;
+
   /// Coluna esquerda do cursor; ele cobre duas colunas. Linha nula enquanto o
   /// jogador ainda não tocou no tabuleiro.
   Column get cursorColumn => _cursorColumn;
@@ -51,9 +62,18 @@ class SwapSystem {
     _cursorColumn = _clampCursor(col);
   }
 
-  /// Troca o bloco pego com o vizinho no sentido de [targetColumn] — uma
-  /// casa, e só uma: um gesto vale uma troca. Ir mais longe com o dedo não
-  /// acumula trocas; para trocar de novo é preciso soltar e tocar outra vez.
+  /// Troca o bloco pego com o vizinho no sentido de [targetColumn] — uma casa
+  /// por chamada.
+  ///
+  /// Com [continuousDrag] desligado, que é o padrão do jogo, **um gesto vale
+  /// uma troca**: ir mais longe com o dedo não acumula, e para trocar de novo
+  /// é preciso soltar e tocar outra vez.
+  ///
+  /// Ligado, o gesto continua armado e o bloco pego segue com o dedo, uma casa
+  /// a cada chamada. Uma casa por chamada, e não um salto até o alvo, porque o
+  /// desenho da troca só sabe animar um par vizinho — e o dedo gera dezenas de
+  /// chamadas por segundo, então atravessar a linha leva alguns quadros e sai
+  /// contínuo de qualquer jeito.
   void dragTo(Column targetColumn) {
     final row = _dragRow;
     final from = _dragColumn;
@@ -81,7 +101,12 @@ class SwapSystem {
       displacedColumn: from,
     );
     _cursorColumn = _clampCursor(from < next ? from : next);
-    endDrag();
+    if (continuousDrag) {
+      // O bloco pego é o mesmo; o que mudou foi onde ele está agora.
+      _dragColumn = next;
+    } else {
+      endDrag();
+    }
   }
 
   void endDrag() {

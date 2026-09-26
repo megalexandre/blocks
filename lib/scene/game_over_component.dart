@@ -16,7 +16,7 @@ class GameOverComponent extends PositionComponent
     with TapCallbacks, HasGameReference<GameScene> {
   GameOverComponent() : super(priority: 20);
 
-  final _painter = GameOverPainter();
+  late final _painter = GameOverPainter(game.elements);
 
   bool get _isOver => game.playfield.isOver;
 

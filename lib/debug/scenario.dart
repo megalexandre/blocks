@@ -20,6 +20,7 @@ class Scenario {
     this.seed = 1,
     this.riseRowsPerSecond,
     this.risePaused = false,
+    this.continuousDrag = false,
   });
 
   /// Como aparece no menu.
@@ -43,6 +44,14 @@ class Scenario {
   /// parados.
   final bool risePaused;
 
+  /// Deixar um arraste só carregar o bloco pela linha inteira, em vez de
+  /// trocar uma casa e parar.
+  ///
+  /// Não existe no jogo: é uma facilidade para examinar uma linha sem soltar e
+  /// tocar a cada casa. Ligado, arrastar vira rotação da linha, que é outra
+  /// regra — por isso fica preso aqui.
+  final bool continuousDrag;
+
   /// Monta o jogo deste cenário, do zero.
   ///
   /// Chamado de novo a cada recarga, e é por isso que ele constrói tudo em
@@ -62,6 +71,7 @@ class Scenario {
     // de entrada, que o desenho não toca, continua sendo o piso repartido.
     board?.paintOn(playfield.grid);
     playfield.risePaused = risePaused;
+    playfield.continuousDrag = continuousDrag;
     return playfield;
   }
 }

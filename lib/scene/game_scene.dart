@@ -4,16 +4,13 @@ import 'package:flame/camera.dart';
 import 'package:flame/components.dart' show Anchor;
 import 'package:flame/game.dart';
 
+import '../config/layout.dart';
 import '../dressing/factory_elements.dart';
 import '../game/playfield.dart';
-import '../config/layout.dart';
-import 'board_component.dart';
-import 'boost_component.dart';
-import 'game_over_component.dart';
-import 'gate_component.dart';
-import 'hud_component.dart';
-import 'scenario_component.dart';
-import 'wall_component.dart';
+import 'loading_page.dart';
+import 'match_page.dart';
+import 'menu_page.dart';
+import 'routes.dart';
 
 class GameScene extends FlameGame {
   /// Recebe uma **receita** de partida, não uma partida pronta.
@@ -22,33 +19,24 @@ class GameScene extends FlameGame {
   /// [Playfield] do mesmo jeito que o primeiro, e só quem criou a cena sabe
   /// qual jeito é esse — a partida normal, ou um cenário do modo de
   /// desenvolvimento. Guardar o jogo pronto deixaria a cena sem como refazê-lo.
-  GameScene({Playfield Function()? createPlayfield})
-    : _createPlayfield = createPlayfield ?? Playfield.standard,
-      super(camera: _buildCamera());
+  GameScene({
+    Playfield Function()? createPlayfield,
+    this.afterLoading = Routes.menu,
+  })  : _createPlayfield = createPlayfield ?? Playfield.standard,
+        super(camera: _buildCamera());
 
   final Playfield Function() _createPlayfield;
 
-  /// O jogo desta partida. Troca inteiro a cada [restart].
+  /// Para onde o carregamento vai quando termina. O modo de desenvolvimento
+  /// pula o menu e cai direto no cenário escolhido lá.
+  final String afterLoading;
+
+  /// O jogo desta partida. Troca inteiro a cada [renewPlayfield].
   late Playfield playfield = _createPlayfield();
 
-  late final FactoryElements elements;
-  late BoardComponent board;
-  late final WallComponent wall;
+  final FactoryElements elements = FactoryElements();
 
-  /// A pilha já foi solta nesta partida.
-  ///
-  /// Dois estados bastam — esperando e jogando. A derrota **não** vira um
-  /// terceiro: quem sabe dela é `playfield.isOver`, e duplicar isso aqui seria
-  /// criar duas respostas para a mesma pergunta, que um dia discordariam.
-  bool _started = false;
-
-  /// O valor de `playfield.isOver` no quadro anterior, para pegar a virada.
-  ///
-  /// Comparar estado em vez de ouvir o evento `ToppedOut` porque os eventos
-  /// são consumidos dentro do `BoardComponent.update` e hoje só chegam ao som;
-  /// encaminhá-los daqui exigiria mudar a assinatura do componente. Ouvir o
-  /// evento é o caminho mais certo, e vale trocar quando a cena virar rota.
-  bool _wasOver = false;
+  late final RouterComponent router;
 
   static CameraComponent _buildCamera() {
     final camera = CameraComponent.withFixedResolution(
@@ -64,66 +52,36 @@ class GameScene extends FlameGame {
 
   @override
   Future<void> onLoad() async {
-    elements = await FactoryElements.load();
-    board = BoardComponent(playfield: playfield, elements: elements);
-    // A ordem da lista não manda; quem manda é o `priority` de cada um. De
-    // trás para frente: paisagem (−10), tabuleiro (0), moldura (5), faixas e
-    // placar (10), fim de jogo (20).
-    wall = WallComponent();
-    await world.addAll([
-      ScenarioComponent(),
-      board,
-      wall,
-      GateComponent(),
-      ...boostBands(),
-      HudComponent(),
-      GameOverComponent(),
-    ]);
-    // A pilha fica segurada enquanto a porta cobre. `risePaused` já existe e
-    // já é documentado como "segurada de fora" — a camada de regra não precisa
-    // saber que existe uma porta.
-    playfield.risePaused = true;
+    // Só a interface aqui: este é o intervalo que o `loadingBuilder` do Flutter
+    // cobre, e o que se vê nele é fundo chapado. Quanto menos entra aqui, menos
+    // tempo a tela fica sem nada.
+    await elements.loadInterface();
+
+    // `Route` comum, e **não** `WorldRoute`: esta entra dentro do `world`,
+    // então as páginas herdam a transformação da câmera e continuam no espaço
+    // fixo 1080×1920. Um roteador filho do `FlameGame` desenharia no canvas
+    // cru, e as telas perderiam a resolução fixa, que é a fundação de tudo
+    // aqui.
+    router = RouterComponent(
+      initialRoute: Routes.loading,
+      routes: {
+        Routes.loading: Route(LoadingPage.new),
+        Routes.menu: Route(MenuPage.new),
+        Routes.match: Route(MatchPage.new),
+      },
+    );
+    await world.add(router);
   }
 
-  /// Abre a porta e solta a pilha.
+  /// Monta uma partida nova. Quem chama é a página, ao recomeçar.
+  void renewPlayfield() => playfield = _createPlayfield();
+
+  /// Recomeça a partida em curso.
   ///
-  /// A pilha só começa a subir quando a porta **terminou** de sair, e não
-  /// quando ela começou: com o tabuleiro ainda tapado, a primeira linha subia
-  /// sem ninguém ver.
-  void startMatch() {
-    if (_started) {
-      return;
-    }
-    _started = true;
-    wall.revealBoard(onDone: () => playfield.risePaused = false);
-  }
-
-  @override
-  void update(double dt) {
-    super.update(dt);
-    if (playfield.isOver && !_wasOver) {
-      wall.hideBoard();
-    }
-    _wasOver = playfield.isOver;
-  }
-
-  /// Joga fora a partida perdida e monta outra.
-  ///
-  /// O tabuleiro é recriado junto porque ele e o pintor recebem o jogo no
-  /// construtor. O placar e o painel de fim de jogo não: eles perguntam à
-  /// cena a cada quadro, e por isso atravessam o recomeço sem saber que
-  /// houve um.
-  /// A porta quebra a simetria do recomeço: ela tem **posição**, que é estado
-  /// atravessando a partida. Sem recolocá-la, jogar de novo abriria com o
-  /// tabuleiro à mostra e a pilha parada.
+  /// Fica aqui, e não na página, porque quem pede é o `GameOverComponent`, que
+  /// só conhece a cena — os componentes leem o jogo por `game.playfield` e não
+  /// sabem em que página estão montados.
   Future<void> restart() async {
-    playfield = _createPlayfield();
-    board.removeFromParent();
-    board = BoardComponent(playfield: playfield, elements: elements);
-    await world.add(board);
-    playfield.risePaused = true;
-    _started = false;
-    _wasOver = false;
-    wall.resetCovering();
+    await router.currentRoute.firstChild<MatchPage>()?.restart();
   }
 }

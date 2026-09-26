@@ -46,17 +46,53 @@ class BoostComponent extends PositionComponent
 
   bool get _pressed => _tapHeld || _dragHeld;
 
+  /// Onde o botão fica, e **só** onde ele aceita toque.
+  ///
+  /// Era a faixa inteira da margem — 156 de largura, do topo ao pé do
+  /// tabuleiro — com o argumento de ser um alvo fácil de acertar sem olhar.
+  /// Na prática isso aceitava toque em muita coisa que não parece botão: a
+  /// madeira do batente acima e abaixo do rebaixo, e a borda da tela. Botão
+  /// que responde fora de onde aparece é botão que se aciona sem querer.
+  ///
+  /// Estático e função pura das constantes, pelo mesmo motivo do
+  /// `BoardComponent.layoutFor()` e do `GateComponent.frameRect()`: é a mesma
+  /// conta que desenha e que aceita o toque, e duas contas parecidas em
+  /// lugares diferentes é como um botão passa a responder fora do lugar.
+  static Rect targetRect(BoostSide side) {
+    final board = BoardComponent.layoutFor();
+    final borderStart = side == BoostSide.left
+        ? board.position.x - UiScale.frameBorder
+        : board.position.x + board.size.x;
+    return Rect.fromLTWH(
+      borderStart + (UiScale.frameBorder - _recessWidth) / 2,
+      board.position.y + (board.size.y - _recessHeight) / 2,
+      _recessWidth,
+      _recessHeight,
+    );
+  }
+
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
-    final board = BoardComponent.layoutFor();
-    final width = board.position.x;
-    position = Vector2(
-      side == BoostSide.left ? 0 : board.position.x + board.size.x,
-      board.position.y,
-    );
-    this.size = Vector2(width, board.size.y);
+    final target = targetRect(side);
+    position = Vector2(target.left, target.top);
+    this.size = Vector2(target.width, target.height);
   }
+
+  /// A partida está correndo: a porta já abriu, a contagem já acabou e ninguém
+  /// perdeu ainda.
+  ///
+  /// Lido do `risePaused`, que é o mesmo sinal que segura a pilha — e não de
+  /// um estado próprio. Acelerar uma pilha que está parada não quer dizer
+  /// nada, então o botão que acelera só existe quando ela anda.
+  bool get _playing => !game.playfield.risePaused && !game.playfield.isOver;
+
+  /// Fora da partida o toque **atravessa**, em vez de ser engolido por um
+  /// botão que não faria nada. É o mesmo truque do `GameOverComponent` e da
+  /// porta.
+  @override
+  bool containsLocalPoint(Vector2 point) =>
+      _playing && super.containsLocalPoint(point);
 
   void _apply() => game.playfield.boosting = _pressed;
 
@@ -102,33 +138,25 @@ class BoostComponent extends PositionComponent
   @override
   void update(double dt) {
     super.update(dt);
-    // A partida pode ter acabado com o dedo ainda em cima, e o recomeço traz
-    // um jogo novo que não sabe que alguém está pressionando.
-    if (_pressed && !game.playfield.isOver) {
+    // A partida pode acabar — ou a porta fechar — com o dedo ainda em cima, e
+    // o recomeço traz um jogo novo que não sabe que alguém está pressionando.
+    if (!_playing) {
+      _tapHeld = false;
+      _dragHeld = false;
+      return;
+    }
+    if (_pressed) {
       game.playfield.boosting = true;
     }
   }
 
-  /// Onde o rebaixo é desenhado, em coordenadas locais da faixa.
-  ///
-  /// A faixa tem a largura da margem (156) e o batente da moldura ocupa os
-  /// 128 encostados no tabuleiro — à direita na faixa da esquerda, à esquerda
-  /// na da direita. O rebaixo é centrado nesse batente, e não na faixa: ele
-  /// pertence à moldura, e a faixa é só quem recebe o toque.
-  Rect _recess() {
-    final borderStart =
-        side == BoostSide.left ? size.x - UiScale.frameBorder : 0.0;
-    return Rect.fromLTWH(
-      borderStart + (UiScale.frameBorder - _recessWidth) / 2,
-      (size.y - _recessHeight) / 2,
-      _recessWidth,
-      _recessHeight,
-    );
-  }
-
   @override
   void render(Canvas canvas) {
-    _painter.render(canvas, _recess(), pressed: _pressed);
+    _painter.render(
+      canvas,
+      Rect.fromLTWH(0, 0, size.x, size.y),
+      pressed: _pressed,
+    );
   }
 }
 

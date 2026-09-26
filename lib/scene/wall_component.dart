@@ -26,7 +26,13 @@ import 'gate_component.dart';
 /// montagem.
 class WallComponent extends PositionComponent
     with TapCallbacks, HasGameReference<GameScene> {
-  WallComponent() : super(priority: 4);
+  WallComponent({required this.onOpen}) : super(priority: 4);
+
+  /// O que fazer quando o jogador toca na porta fechada.
+  ///
+  /// Callback, e não uma chamada à cena: a porta não precisa saber que existe
+  /// uma partida do outro lado dela — precisa só avisar que foi tocada.
+  final void Function() onOpen;
 
   /// Quanto dura o deslize. Herdado da parede antiga, que já tinha esse
   /// número escolhido no olho.
@@ -102,7 +108,7 @@ class WallComponent extends PositionComponent
       _covering && super.containsLocalPoint(point);
 
   @override
-  void onTapUp(TapUpEvent event) => game.startMatch();
+  void onTapUp(TapUpEvent event) => onOpen();
 
   @override
   void render(Canvas canvas) {
